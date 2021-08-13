@@ -1,0 +1,611 @@
+---
+title: "Programación Funcional con {purrr}"
+author: "Growth Acceleration Partners"
+date: "8/12/2021"
+output:
+  ioslides_presentation:
+    widescreen: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# purrr: 
+"Provee un conjunto de herrramientas para trabajar con funciones y vectores de manera consistente"
+
+
+# 0. Funciones en R
+
+```{r, eval=FALSE}
+nombre_funcion <- function(parametro1, parametro2, ...){
+  # [cuerpo de la funcion]
+  
+  return(valor_a_retornar)
+}
+```
+
+Tip de vida: dentro del cuerpo de la funcion usar `ctrl` + `shift` + `R`
+
+```{r, eval=FALSE}
+#' Title
+#'
+#' @param parametro1 
+#' @param parametro2 
+#' @param ... 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+nombre_funcion <- function(parametro1, parametro2, ...){
+  # [cuerpo de la funcion]
+  
+  return(valor_a_retornar)
+}
+```
+
+Este tipo de documentación se llama Roxygen2, y esta es la forma de documentar paquetes en R
+
+## Ambientes en R
+
+Cuando una función se ejecuta, crea su propio ambiente contenido en el ambiente global. La función va a buscar primero los valores dentro de su propio ambiente, y si no existen "saldrá" a buscarlos en los niveles superiores.
+
+```{r}
+x <- 1
+y <- 2
+
+f <- function(x){
+  message('x vale `', x, '`, y vale `', y, '`.')
+}
+
+f(x=3)
+f(x="AAAAA!!!")
+```
+
+Bajo esta perspectiva,la acción de pasarle parámetros a una función lo que hace es declarar esas variables en el nuevo ambiente. Y cuando esta función termina su ejecución, ese ambiente se extingue sin pasarle sus valores a nadie más.
+
+```{r}
+cambiar_x <- function(){
+  x <- x + 1
+  message('Adentro, cambiamos x: ahora vale ', x)
+}
+
+cambiar_x()
+message('Pero afuera, queda igual: ', x)
+
+```
+
+Por supuesto, para esto es que existe la función `return()`, la cual le "entrega" un objeto del ambiente de la función al ambiente desde donde se llamó la función.
+
+```{r}
+cambiar_x <- function(x){
+  x <- x + 1
+  message('Adentro, cambiamos x: ahora vale ', x)
+  return(x)
+}
+
+x <- cambiar_x(x)
+message('Y con una asignación sí cambia: ', x)
+
+```
+
+## Efectos secundarios
+
+Si bien el llamado de `return` es el que le permite a una función enviar valores a otro ambiente, no hay nada que les detenga hacer cambios en memoria de otras maneras, como por ejemplo escribir en el disco (como `write_csv`, `saveRDS`, etc.), o modificar directamente los valores en RAM por referencia (como los mutate de `data.table` `dt[, :=]` o la asignación `<<-`). Estos son llamados efectos secundarios porque si bien no son parte del `return`, generan cambios fuera de su ambiente.
+
+
+## Listas
+
+Contenedores indexados sin restricciones de clase:
+
+```{r}
+lista <- list(sum, c(1,3,5), 'Naranja')
+```
+
+Al igual que los vectores atómicos, podemos seleccionar un elemento con `[]`. Con corchetes simples, devuelve una lista de longitud 1 que contiene el elemento indexado
+
+```{r}
+# lista[2] == list(c(1,3,5))
+lista[2]
+```
+
+Con corchetes dobles ``[[]]`` retorna el elemento contenido de la lista
+
+```{r}
+# lista[[2]] == c(1,3,5)
+lista[[2]]
+```
+
+La función str() es sumamente útil para perderle el miedo a las listas. El parámetro max.level permite especificar hasta qué nivel desgranar
+
+```{r}
+str(object = lista)
+```
+
+*Dificultades con las listas:*
+
+1. Pueden (o no) tener nombres
+2. Pueden contener otras listas 
+
+```{r}
+lista$entrada_con_nombre <- list(mean, vector_con_nombre=letters[1:3], c('a', 'b', 'c'))
+```
+
+Y el parámetro `max.level` nos ayuda a ver la estructura hasta cierto nivel, para mantenerla legible
+```{r}
+str(object = lista, max.level = 1)
+str(object = lista, max.level = 2)
+```
+
+# 1. Programacion funcional
+
+## Minimo Necesario:
+
+Un *funcional* es una función que recibe una funcion en sus parametros, y devuelve un vector
+"En R, las funciones son ciudadanas de primera clase" -> se pueden enviar como parámetros en otras funciones
+
+
+# original: https://adv-r.hadley.nz/fp.html
+# traducido: https://translate.google.com/translate?hl=&sl=en&tl=es&u=https%3A%2F%2Fadv-r.hadley.nz%2Ffunctionals.html
+
+
+**programación funcional: las funciones también son objetos que pueden entregarse como parámetros a otras funciones**
+
+
+## Funciones puras e impuras
+
+
+```{r}
+fpura = function(x,y,z){
+  z <- z + mean(x,y)
+}
+```
+
+## Funciones impuras
+
+```{r}
+fimpura = function(x){
+  z <- z + mean(x,y) # usa valores que no son parte del ambiente
+    
+  z <<- 2 # modifica valores fuera de su ambiente
+}
+```
+
+
+```{r}
+
+
+# *apply family of functions
+base::apply(X = 1:10, MARGIN = 1, FUN = sqrt) #does not work
+base::sapply(X = 1:10, FUN = sqrt)
+?lapply; ?vapply; ?mapply
+
+```
+
+# Introducing the map family of functions --------------------------------------
+```{r}
+
+# same but better: purrr::map
+purrr::map(.x = 1:10, .f = sqrt)
+#lists? 
+
+# advantages:
+
+## 1. formula notation
+purrr::map(.x = 1:10, .f = ~sqrt(.x))
+purrr::map(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
+
+## 2. output class modifiers
+purrr::map_dbl(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
+purrr::map_int(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
+purrr::map_lgl(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
+purrr::map_chr(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
+purrr::map_df(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
+purrr::map_df(.x = 1:10 %>% purrr::set_names(.), .f = ~round(sqrt(.x), 2) + 1)
+
+## 3. further modifiers
+#### 3.1 map2 runs through 2 lists pairwise
+purrr::map2(.x = 1:10, .y = 1:10, .f = ~.x + .y)
+purrr::map2_int(.x = 1:10, .y = 10:10, .f = ~.x + .y)
+
+### 3.2 pmap generalizes to n vectors
+list(a = 1:10, b = 1:10, c = 1:10) %>% 
+  purrr::pmap(.f = sum)
+list(a = 1:10, b = 1:10, c = 1:10) %>% 
+  purrr::pmap_int(.f = function(a,b,c) a + b + c)
+
+### 3.3 walk is map() for side effects (printing, writing, modifying by reference)
+purrr::walk(.x = 1:10, .f = ~sqrt(.x)) # returns nothing! 
+
+### 3.3 map_if modifies only the list entries that return TRUE on .p
+purrr::map_if(.x = list(a = 1:15, b = letters, c = runif(200)), 
+              .p = is.numeric,
+              .f = sum)
+
+#and it has an .else parameter
+purrr::map_if(.x = list(a = 1:15, b = letters, c = runif(200)), 
+              .p = is.numeric,
+              .f = sum, 
+              .else = ~paste(.x, collapse=''))
+
+### 3.4 map_at
+purrr::map_at(.x = list(a = 1:15, b = letters, c = runif(200)), 
+              .at = c(1,3),
+              .f = sum)
+
+purrr::map_at(.x = list(a = 1:15, b = letters, c = runif(200)), 
+              .at = c('a', 'c'),
+              .f = sum)
+
+### 3.5 map_depth maps inside a nested list
+# equivalent to map(.x, map, .f),
+# map(.x, ~map(.x, ~map(..., map(.x, map, .f)))
+purrr::map_depth(.x = list(a = list('element1 is', 'A'),
+                           b = list('element2 is', 9),
+                           c = list('element3 is', pi)),
+                 .depth = 1,
+                 .f = ~paste(.x, collapse = ' '))
+
+# map: Just do it once! -------------------------------------------------------------
+
+# load some data
+pkmn <- fread('pkmn.csv') %>% janitor::clean_names()
+
+# get the mean speed for each type? -> immediate
+pkmn[, .(mean_speed = mean(speed)), by = type_1]
+
+# more complex asks: make a plot of hp vs speed for each type separately
+pkmn[, .(`???`), by = type]
+
+# long way to facet_wrap()
+
+# Demo 1 -----------------------------------------------------------------------
+
+# tip: split goes from single data.frame to named list of dataframes
+type_tables <- pkmn %>% split(., .$type_1)
+str(type_tables, 1, give.attr = F)
+
+type_plots <- type_tables %>% 
+  map(~ggplot(.x, 
+              mapping = aes(x = speed, y = hp)) + 
+        geom_point() + 
+        theme_minimal())
+# call each plot
+type_plots$Normal
+
+# slightly better
+type_plots <- type_tables %>% 
+  map2(.y = names(.),
+       ~ggplot(data = .x, 
+               mapping = aes(x = speed, y = hp),
+               alpha = .85) + 
+         geom_smooth(formula = y~x, method = 'lm') + 
+         geom_point() + 
+         theme_minimal() + 
+         ggtitle(.y)) %>% 
+  map(.x = ., .f = plotly::ggplotly)
+
+# call each plot
+type_plots$Electric
+type_plots$Dragon
+
+split_plot <- function(data, split_variable, x_axis, y_axis, static = TRUE){
+  split_data <- data %>% split(data[[split_variable]])
+  
+  split_plots <- split_data %>% 
+    map2(.y = names(.),
+         ~ggplot(data = .x, 
+                 mapping = aes_string(x = x_axis, y = y_axis),
+                 alpha = .85) + 
+           geom_smooth(formula = y~x, method = 'lm') + 
+           geom_point() + 
+           theme_minimal() + 
+           ggtitle(.y))
+  
+  if(!static){
+    split_plots %<>% map(plotly::ggplotly)
+  }
+
+  return(split_plots)
+}
+
+split_plot(data = iris,
+           split_variable = 'Species',
+           x_axis = 'Sepal.Length',
+           y_axis = 'Sepal.Width')
+
+# Demo 2 ------------------------------------------------------------------
+
+# plot the relationship of each other stat vs_hp ???
+
+# plot the relationship of each other stat vs hp
+
+stats <- c('attack', 'defense', 'sp_atk', 'sp_def') %>% 
+  purrr::set_names(.)
+
+
+map(.x = stats,
+    .f = ~chronicle::make_scatterplot(dt = pkmn,
+                                     x = .x,
+                                     y = 'hp', 
+                                     show_trend = TRUE, 
+                                     trend_method = 'lm'))
+
+hp_relationship <- map(.x = stats,
+    .f = ~chronicle::make_scatterplot(dt = pkmn,
+                                      x = .x,
+                                      y = 'hp',
+                                      groups = 'type_1', 
+                                      faceted = TRUE,
+                                      show_trend = TRUE, 
+                                      trend_method = 'lm', 
+                                      static = TRUE, 
+                                      scales = 'free') + 
+      ggtitle(.x)) %>%
+  map(plotly::ggplotly)
+
+
+hp_relationship$sp_atk
+
+plot_all_vs_one <- function(data, variable, groups, static = TRUE){
+  # identify all columns 
+  cols <- colnames(data) %>% 
+    purrr::set_names(.) %>% 
+    setdiff(variable)
+  
+  var_vs_all <- map(.x = cols,
+                         .f = ~chronicle::make_scatterplot(dt = data,
+                                                           x = .x,
+                                                           y = variable,
+                                                           groups = groups, 
+                                                           faceted = TRUE,
+                                                           show_trend = is.numeric(data[[.x]]), 
+                                                           trend_method = 'lm', 
+                                                           static = TRUE, 
+                                                           scales = 'free') + 
+                           ggtitle(.x))
+  
+  if(!static){
+    var_vs_all %<>% map(plotly::ggplotly)
+  }
+  return(var_vs_all)
+}
+
+plot_all_vs_one(data = iris, variable = 'Sepal.Width', groups = 'Species', static = TRUE)
+
+
+colnames(palmerpenguins::penguins) %>% set_names()
+
+# Demo 3 ------------------------------------------------------------------
+
+#' Check if the given parameter is of a specific class
+#'
+#' @param param Object to be checked.
+#' @param param_name Name of the parameter.
+#' @param checking_function The function to evaluate. Must return a boolean value (eg is.character, is.finite, is.data.frame)
+#' @param class_name Name of the class to place in the error message
+#' @param allow_null Skip the error if param is NULL. Default is FALSE.
+#'
+#' @return Returns an error message if param is not a ", class_name, ".
+#' @export
+#'
+#' @examples
+check_class <- function(param,
+                        param_name,
+                        checking_function,
+                        class_name,
+                        allow_null = FALSE){
+  if(!checking_function(param) | (allow_null & is.null(param))){
+    stop("'", param_name, "' parameter must be a ",  class_name,
+         ", but a ", paste(class(param), collapse = ' '), " was passed.")
+  }
+}
+
+
+# make particular cases 
+
+#' Check if the given parameter is a character vector
+#'
+#' @param param Object to be checked.
+#' @param param_name Name of the parameter.
+#' @param allow_null Skip the error if param is NULL. Default is FALSE.
+#'
+#' @return Returns an error message if param is not a character vector.
+#' @export
+check_char <- function(param, param_name, allow_null = FALSE){
+  check_class(param = param,
+              param_name = param_name,
+              checking_function = is.character,
+              class_name = 'character vector')
+}
+
+#' Check if the given parameter is a numeric vector
+#'
+#' @param param Object to be checked.
+#' @param param_name Name of the parameter.
+#' @param allow_null Skip the error if param is NULL. Default is FALSE.
+#'
+#' @return Returns an error message if param is not a numeric vector.
+#' @export
+check_num <- function(param, param_name, allow_null = FALSE){
+  check_class(param = param,
+              param_name = param_name,
+              checking_function = is.numeric,
+              class_name = 'numeric vector')
+}
+
+
+
+# make all of them in one call --------------------------------------------
+
+make_check_function <- function(suffix, check_fun, class_name){
+  check_this <- paste0("#' Check if the given parameter is a ", class_name, "
+#'
+#' @param param Object to be checked.
+#' @param param_name Name of the parameter.
+#' @param allow_null Skip the error if param is NULL. Default is FALSE.
+#'
+#' @return Returns an error message if param is not a ", class_name, ".
+#' @export
+check_", suffix, " <- function(param, param_name, allow_null = FALSE){
+  check_class(param = param,
+              param_name = param_name,
+              checking_function = ", check_fun, ",
+              class_name = '", class_name, "')
+}\n\n")
+  cat(check_this)
+}
+
+function_specs <- data.table(suffix = c('char', 'num', 'dt', 'df', 'logical'),
+                            check_fun = c('is.character',
+                                          'is.numeric',
+                                          'data.table::is.data.table',
+                                          'is.data.frame',
+                                          'is.logical'),
+                            class_name = c('character vector',
+                                           'numeric vector',
+                                           'data.table',
+                                           'data.frame',
+                                           'logical vector'))
+purrr::pwalk(.l = function_specs,
+             .f = make_check_function)
+
+
+# check functions ---------------------------------------------------------
+
+
+#' Check if the given parameter is a character vector
+#'
+#' @param param Object to be checked.
+#' @param param_name Name of the parameter.
+#' @param allow_null Skip the error if param is NULL. Default is FALSE.
+#'
+#' @return Returns an error message if param is not a character vector.
+#' @export
+check_char <- function(param, param_name, allow_null = FALSE){
+  check_class(param = param,
+              param_name = param_name,
+              checking_function = is.character,
+              class_name = 'character vector')
+}
+
+#' Check if the given parameter is a numeric vector
+#'
+#' @param param Object to be checked.
+#' @param param_name Name of the parameter.
+#' @param allow_null Skip the error if param is NULL. Default is FALSE.
+#'
+#' @return Returns an error message if param is not a numeric vector.
+#' @export
+check_num <- function(param, param_name, allow_null = FALSE){
+  check_class(param = param,
+              param_name = param_name,
+              checking_function = is.numeric,
+              class_name = 'numeric vector')
+}
+
+#' Check if the given parameter is a data.table
+#'
+#' @param param Object to be checked.
+#' @param param_name Name of the parameter.
+#' @param allow_null Skip the error if param is NULL. Default is FALSE.
+#'
+#' @return Returns an error message if param is not a data.table.
+#' @export
+check_dt <- function(param, param_name, allow_null = FALSE){
+  check_class(param = param,
+              param_name = param_name,
+              checking_function = data.table::is.data.table,
+              class_name = 'data.table')
+}
+
+#' Check if the given parameter is a data.frame
+#'
+#' @param param Object to be checked.
+#' @param param_name Name of the parameter.
+#' @param allow_null Skip the error if param is NULL. Default is FALSE.
+#'
+#' @return Returns an error message if param is not a data.frame.
+#' @export
+check_df <- function(param, param_name, allow_null = FALSE){
+  check_class(param = param,
+              param_name = param_name,
+              checking_function = is.data.frame,
+              class_name = 'data.frame')
+}
+
+#' Check if the given parameter is a logical vector
+#'
+#' @param param Object to be checked.
+#' @param param_name Name of the parameter.
+#' @param allow_null Skip the error if param is NULL. Default is FALSE.
+#'
+#' @return Returns an error message if param is not a logical vector.
+#' @export
+check_logical <- function(param, param_name, allow_null = FALSE){
+  check_class(param = param,
+              param_name = param_name,
+              checking_function = is.logical,
+              class_name = 'logical vector')
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Bonus! purrr::reduce -----------------------------------------------------------
+
+f(f(a,b), c)
+
+# binary operations that are closed
+purrr::reduce(type_tables, rbind)
+purrr::reduce(type_tables, dplyr::left_join)
+
+
+# Bonus 2! furrr: future + purrr -----------------------------------------------
+library(furrr)
+plan(multiprocess) # might take some time prepping
+
+# https://github.com/DavisVaughan/furrr
+
+library(tictoc)
+
+tic('sequential')
+map(c(2, 2, 2), ~Sys.sleep(.x))
+toc()
+
+tic('parallel')
+future_map(c(2, 2, 2), ~Sys.sleep(.x))
+toc()
+
+
+# It's important to remember that data has to be passed back and forth between 
+# the workers. This means that whatever performance gain you might have gotten 
+# from your paralellization can be crushed by moving large amounts of data around. 
+
+```
+
+
+# Lecturas recomendadas
+
+- La sección de [iteración](https://es.r4ds.hadley.nz/iteraci%C3%B3n.html) del libro R para ciencia de datos (traducción comunitaria del celebrado libro R for Data Science) R4DS)
+- En realidad todo el libro de R para Ciencia de Datos
+- 
+
+
