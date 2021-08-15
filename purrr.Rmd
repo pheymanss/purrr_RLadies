@@ -11,10 +11,12 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+library(purrr)
+```
 
 # purrr: 
 "Provee un conjunto de herrramientas para trabajar con funciones y vectores de manera consistente"
-
 
 # 0. Funciones en R
 
@@ -26,7 +28,7 @@ nombre_funcion <- function(parametro1, parametro2, ...){
 }
 ```
 
-Tip de vida: dentro del cuerpo de la funcion usar `ctrl` + `shift` + `R`
+Tip de vida: dentro del cuerpo de la funcion usar `ctrl` + `alt` + `shift` + `R`
 
 ```{r, eval=FALSE}
 #' Title
@@ -46,11 +48,12 @@ nombre_funcion <- function(parametro1, parametro2, ...){
 }
 ```
 
-Este tipo de documentación se llama Roxygen2, y esta es la forma de documentar paquetes en R
+Este tipo de documentación se llama Roxygen, y esta es la forma de documentar paquetes en R.
+
 
 ## Ambientes en R
 
-Cuando una función se ejecuta, crea su propio ambiente contenido en el ambiente global. La función va a buscar primero los valores dentro de su propio ambiente, y si no existen "saldrá" a buscarlos en los niveles superiores.
+Cuando una función se ejecuta, crea su propio ambiente contenido en el ambiente desde donde se llamó la función. La función va a buscar primero los valores dentro de su propio ambiente, y si no existen "saldrá a buscarlos" en los niveles superiores.
 
 ```{r}
 x <- 1
@@ -77,7 +80,7 @@ message('Pero afuera, queda igual: ', x)
 
 ```
 
-Por supuesto, para esto es que existe la función `return()`, la cual le "entrega" un objeto del ambiente de la función al ambiente desde donde se llamó la función.
+Por supuesto, para esto es que existe la función `return()`, la cual le "entrega" un objeto del ambiente de la función al siguiente nivel hacia arriba.
 
 ```{r}
 cambiar_x <- function(x){
@@ -96,6 +99,53 @@ message('Y con una asignación sí cambia: ', x)
 Si bien el llamado de `return` es el que le permite a una función enviar valores a otro ambiente, no hay nada que les detenga hacer cambios en memoria de otras maneras, como por ejemplo escribir en el disco (como `write_csv`, `saveRDS`, etc.), o modificar directamente los valores en RAM por referencia (como los mutate de `data.table` `dt[, :=]` o la asignación `<<-`). Estos son llamados efectos secundarios porque si bien no son parte del `return`, generan cambios fuera de su ambiente.
 
 
+
+## Funciones puras e impuras
+
+Para que una función se considere pura, debe cumplir:
+1. Si la función se llama varias veces con los mismos parámetros, debe siempre retornar el mismo valor (salvo alatoreidad deseada).
+2. La función no debe tener efectos secundarios.
+
+
+```{r}
+fpura = function(x,y,z){
+  z <- z + mean(c(x,y))
+  return(z)
+}
+```
+
+```{r}
+x <- 1
+y <- 2
+z <- 3
+
+fpura(x,y,z)
+fpura(x,y,z)
+fpura(x,y,z)
+
+print(c(x,y,z))
+```
+
+
+```{r}
+fimpura = function(x,y,z){
+  z <<- z + mean(x,y) # modifica valores fuera de su ambiente (mala práctica!)
+  print(z)
+}
+```
+
+```{r}
+x <- 1
+y <- 2
+z <- 3
+
+fimpura(x,y,z)
+fimpura(x,y,z)
+fimpura(x,y,z)
+
+print(c(x,y,z)) # ambió de valor fuera de la funcion
+```
+
 ## Listas
 
 Contenedores indexados sin restricciones de clase:
@@ -104,24 +154,29 @@ Contenedores indexados sin restricciones de clase:
 lista <- list(sum, c(1,3,5), 'Naranja')
 ```
 
-Al igual que los vectores atómicos, podemos seleccionar un elemento con `[]`. Con corchetes simples, devuelve una lista de longitud 1 que contiene el elemento indexado
+Al igual que los vectores atómicos, podemos seleccionar un elemento con `[]`. Con corchetes simples, devuelve una lista de que contiene el (los) elemento(s) indexado(s).
 
 ```{r}
 # lista[2] == list(c(1,3,5))
 lista[2]
 ```
+```{r}
+# lista[2:3] == list(c(1,3,5), "Naranja")
+lista[2:3]
+```
 
-Con corchetes dobles ``[[]]`` retorna el elemento contenido de la lista
+
+Con corchetes dobles ``[[]]`` retorna el elemento de la lista directaments, sea de la clase que sea
 
 ```{r}
 # lista[[2]] == c(1,3,5)
 lista[[2]]
 ```
 
-La función str() es sumamente útil para perderle el miedo a las listas. El parámetro max.level permite especificar hasta qué nivel desgranar
-
 ```{r}
-str(object = lista)
+# lista[[2]] == c(1,3,5)
+class(lista[2])
+class(lista[[2]])
 ```
 
 *Dificultades con las listas:*
@@ -133,7 +188,14 @@ str(object = lista)
 lista$entrada_con_nombre <- list(mean, vector_con_nombre=letters[1:3], c('a', 'b', 'c'))
 ```
 
-Y el parámetro `max.level` nos ayuda a ver la estructura hasta cierto nivel, para mantenerla legible
+La función str() es sumamente útil para perderle el miedo a las listas. El parámetro max.level permite especificar hasta qué nivel desgranar
+
+```{r}
+str(object = lista)
+```
+
+Y el parámetro `max.level` nos ayuda a ver la estructura hasta cierto nivel, lo cual nos sirve para mantener legible la impresión.
+
 ```{r}
 str(object = lista, max.level = 1)
 str(object = lista, max.level = 2)
@@ -143,54 +205,45 @@ str(object = lista, max.level = 2)
 
 ## Minimo Necesario:
 
-Un *funcional* es una función que recibe una funcion en sus parametros, y devuelve un vector
-"En R, las funciones son ciudadanas de primera clase" -> se pueden enviar como parámetros en otras funciones
+"En R, las funciones son ciudadanas de primera clase" -> Existen en el ambiente y se pueden enviar como cualquier otro parámtro a otras funciones
+
+Un *funcional* es una función que recibe otra función entre sus parametros, y devuelve un vector
 
 
-# original: https://adv-r.hadley.nz/fp.html
-# traducido: https://translate.google.com/translate?hl=&sl=en&tl=es&u=https%3A%2F%2Fadv-r.hadley.nz%2Ffunctionals.html
+## Funcionales en R base
 
-
-**programación funcional: las funciones también son objetos que pueden entregarse como parámetros a otras funciones**
-
-
-## Funciones puras e impuras
+La familia de funciones `apply` se llaman así porque *aplican* una función a cada uno de los elementos de un vector (aquí usamos vector de forma muy suelta, refiriéndonos a cualquier objeto indexable). Importante notar que la función se pone sin paréntesis, porque lo que pasamos es el objeto, no la llamada.
 
 
 ```{r}
-fpura = function(x,y,z){
-  z <- z + mean(x,y)
-}
+# base::apply(X = 1:10, MARGIN = 1, FUN = sqrt) # este no funciona
+base::sapply(X = 1:10, FUN = sqrt) # s viene de 'simplified'
+#?lapply; ?vapply; ?mapply
 ```
 
-## Funciones impuras
+Y para usar funciones con más de un parámetro, estas funciones aprovechan el constructo `...`, que les permite especificar parámetros que pasarle a `FUN` 
 
 ```{r}
-fimpura = function(x){
-  z <- z + mean(x,y) # usa valores que no son parte del ambiente
-    
-  z <<- 2 # modifica valores fuera de su ambiente
-}
+raices_cuadradas <- sapply(X = 1:10, FUN = sqrt)
+sapply(X = raices_cuadradas, FUN = round, digits = 1)
 ```
 
+# 2. `purrr`
+
+Las funciones `map` del paquete `purrr` vienen a desempeñar el mismo rol iterativo, pero con un conjunto de facilidades que hacen que se acoplen mejor a un esuqema de trabajo moderno en R.
+
+La función base es `map`, que recibe un vector `.x`, y le aplica la función `.f`. Esta función devuelve una lista donde cada entrada es la evaluación de `.f(.x[1])`
 
 ```{r}
-
-
-# *apply family of functions
-base::apply(X = 1:10, MARGIN = 1, FUN = sqrt) #does not work
-base::sapply(X = 1:10, FUN = sqrt)
-?lapply; ?vapply; ?mapply
-
-```
-
-# Introducing the map family of functions --------------------------------------
-```{r}
-
-# same but better: purrr::map
 purrr::map(.x = 1:10, .f = sqrt)
-#lists? 
+```
 
+
+### Notación de fórmula
+
+Si bien las funciones `map` tienen el mismo parámetro `...`, puede resultar más legible y más fácil de escribir las funciones en notación de fórmula. Esto es, se coloca la viulilla `~` antes de una llamada normal de una función, donde se colocará la variable `.x` para representar  
+
+```{r}
 # advantages:
 
 ## 1. formula notation
@@ -608,4 +661,8 @@ toc()
 - En realidad todo el libro de R para Ciencia de Datos
 - 
 
+
+
+# original: https://adv-r.hadley.nz/fp.html
+# traducido: https://translate.google.com/translate?hl=&sl=en&tl=es&u=https%3A%2F%2Fadv-r.hadley.nz%2Ffunctionals.html
 
