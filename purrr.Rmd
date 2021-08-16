@@ -50,7 +50,6 @@ nombre_funcion <- function(parametro1, parametro2, ...){
 
 Este tipo de documentación se llama Roxygen, y esta es la forma de documentar paquetes en R.
 
-
 ## Ambientes en R
 
 Cuando una función se ejecuta, crea su propio ambiente contenido en el ambiente desde donde se llamó la función. La función va a buscar primero los valores dentro de su propio ambiente, y si no existen "saldrá a buscarlos" en los niveles superiores.
@@ -212,27 +211,88 @@ Un *funcional* es una función que recibe otra función entre sus parametros, y 
 
 ## Funcionales en R base
 
-La familia de funciones `apply` se llaman así porque *aplican* una función a cada uno de los elementos de un vector (aquí usamos vector de forma muy suelta, refiriéndonos a cualquier objeto indexable). Importante notar que la función se pone sin paréntesis, porque lo que pasamos es el objeto, no la llamada.
+La familia de funciones `apply` se llaman así porque *aplican* una función a cada uno de los elementos de un vector (aquí usamos vector de forma muy flexible, refiriéndonos a cualquier objeto indexable). Importante notar que la función se pone sin paréntesis, porque lo que pasamos es el objeto, no la llamada.
 
 
 ```{r}
-# base::apply(X = 1:10, MARGIN = 1, FUN = sqrt) # este no funciona
-base::sapply(X = 1:10, FUN = sqrt) # s viene de 'simplified'
-#?lapply; ?vapply; ?mapply
+apply_manual <- function(FUN, X){
+  for(Xi in X){
+    FXi = FUN(Xi)
+    print(FXi)
+  }
+}
+
+apply_manual(FUN = sqrt, X = 1:10)
 ```
 
-Y para usar funciones con más de un parámetro, estas funciones aprovechan el constructo `...`, que les permite especificar parámetros que pasarle a `FUN` 
+```{r}
+base::apply(X = mtcars, MARGIN = 2, FUN = mean)
+base::sapply(X = 1:10, FUN = sqrt) # s viene de 'simplified'
+#?lapply; ?vapply; ?tapply
+```
+
+Algo importante a notar de esta última llamada es que todas estas funciones conservan los nombres de los elementos por los que iteran. Esto es una excelente práctica para conservar el orden y trazar con mayor facilidad los resultados de estas llamadas, y una acción frecuentemente cómoda es nombrar cada elemento con su mismo valor:
+
+```{r}
+aj <- letters[1:10]
+names(aj) <- aj
+resultado_apply <- lapply(X = aj, FUN = toupper)
+
+names(resultado_apply)
+resultado_apply$a
+resultado_apply$c
+```
+
+Y aunque si bien no es tan inmediatamente legible, la función `set_names` de `purrr` (que llama a la función de `rlang` con el mismo nombre) recibe el vector y un vector de nombres, y devuelve ese mismo vector ya nombrado. Esto permite que no se tenga que romper el camino de llamadas para asignar nombres
+
+```{r}
+resultado_apply <- letters[1:10] %>% 
+  purrr::set_names(.) %>% # acá recibe el vector, y adicionalmente decimos que el segundo parametro va a ser el mismo vector
+  lapply(FUN = toupper)
+
+names(resultado_apply)
+resultado_apply$a
+resultado_apply$c
+
+```
+
+ 
+ 
+ Y para usar funciones con más de un parámetro, estas funciones aprovechan el constructo `...`, que sirve como un "comodín" para pasarle parámetros a una función interna:
+
+```{r}
+aplicar_tres_puntos <- function(funcion, ...){
+  funcion(...)
+}
+
+# con la funcion round
+?round
+aplicar_tres_puntos(funcion = round, x = 0.5555555, digits = 2)
+
+# con la funcion sort
+?sort
+aplicar_tres_puntos(funcion = sort, x = c(1,3,2,NA,100))
+aplicar_tres_puntos(funcion = sort, x = c(1,3,2,NA,100), decreasing = TRUE)
+aplicar_tres_puntos(funcion = sort, x = c(1,3,2,NA,100), decreasing = TRUE, na.last = TRUE)
+
+
+```
+
 
 ```{r}
 raices_cuadradas <- sapply(X = 1:10, FUN = sqrt)
-sapply(X = raices_cuadradas, FUN = round, digits = 1)
+sapply(X = raices_cuadradas, FUN = round, digits = 2)
 ```
+
+Podemos ver tanto que en la función construida como en las llamadas de sapply, no existe un parámetro `digits`. esta es de la función `round` propiamente, y el constructo `...` permite que se le pase sin requerir que cada parámetro esté declarado explícitamente en la función que la llama. 
+
+
 
 # 2. `purrr`
 
 Las funciones `map` del paquete `purrr` vienen a desempeñar el mismo rol iterativo, pero con un conjunto de facilidades que hacen que se acoplen mejor a un esuqema de trabajo moderno en R.
 
-La función base es `map`, que recibe un vector `.x`, y le aplica la función `.f`. Esta función devuelve una lista donde cada entrada es la evaluación de `.f(.x[1])`
+La función básica es `map`, que recibe un vector `.x`, y le aplica la función `.f`. Esta función devuelve una lista donde cada entrada es la evaluación de `.f(.x[i])`
 
 ```{r}
 purrr::map(.x = 1:10, .f = sqrt)
@@ -241,65 +301,121 @@ purrr::map(.x = 1:10, .f = sqrt)
 
 ### Notación de fórmula
 
-Si bien las funciones `map` tienen el mismo parámetro `...`, puede resultar más legible y más fácil de escribir las funciones en notación de fórmula. Esto es, se coloca la viulilla `~` antes de una llamada normal de una función, donde se colocará la variable `.x` para representar  
+Si bien las funciones `map` tienen el mismo parámetro `...`, puede resultar más legible y más fácil de escribir las funciones en notación de fórmula. Esto es, se coloca la virgulilla `~` antes de una llamada normal de una función, y se usará la variable `.x` en el parámetro por el que se va a iterar. 
 
 ```{r}
-# advantages:
-
 ## 1. formula notation
 purrr::map(.x = 1:10, .f = ~sqrt(.x))
+```
+
+La principal ventaja de esta notación es que permite ser más explícito con la intención del código, y admite escencialmente cualquier expresión.
+
+```{r}
 purrr::map(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
+```
 
-## 2. output class modifiers
+Incluso cadenas con el operador pipe `%>%` de magrittr, o el nuevo pipe nativo `|>` de R >=4.1
+
+```{r}
+purrr::map(.x = 1:10, 
+           .f = ~.x %>% 
+             sqrt() %>%
+             round(2) 
+             + 1)
+```
+
+### Modificadores de clase
+
+Si bien las listas son una estructura adecuada para almacenar resultados arbitrarios ya que permiten coleccionar entradas de cualquier clase (e incluso de clases distintas), existen muchos usos donde tener el resultado ennuna lista se vuelve incómodio. Para esto, la familia de funciones incluye `map`s son sufijos que especifican la clase en que se desea recibir el resultado. Por supuesto, las salidas deben ser convertibles a la clase deseada, y es nceesario entender los requisitos de cada una. 
+
+Estas funciones son opinionadas por diseño, ya que desean evitar que una coerción inusual arruine la línea de procesos completa. Esto significa que son más estricas que usar las funciones de coerción `as.integer`, `as.character`, `as.integer`, etc.
+
+```{r}
+# doubles
 purrr::map_dbl(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
-purrr::map_int(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
-purrr::map_lgl(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
-purrr::map_chr(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
-purrr::map_df(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
-purrr::map_df(.x = 1:10 %>% purrr::set_names(.), .f = ~round(sqrt(.x), 2) + 1)
+```
 
-## 3. further modifiers
+
+```{r}
+map_int(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1) # frena de doble a enteros
+map_int(.x = 1:10, .f = ~as.integer(round(sqrt(.x), 2) + 1)) 
+map_lgl(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1) # frena
+map_lgl(.x = 1:10, .f = ~as.logical(round(sqrt(.x), 2) + 1)) 
+map_chr(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
+map_df(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1) #data.frame requiere que tengan nombres
+```
+### Más modificaodres
+
+#### `map2` permite recorrer dos vectores emparejando índices
+
+```{r}
 #### 3.1 map2 runs through 2 lists pairwise
 purrr::map2(.x = 1:10, .y = 1:10, .f = ~.x + .y)
 purrr::map2_int(.x = 1:10, .y = 10:10, .f = ~.x + .y)
+```
 
-### 3.2 pmap generalizes to n vectors
+#### `pmap` generaliza map2 a p vectores
+
+```{r}
 list(a = 1:10, b = 1:10, c = 1:10) %>% 
   purrr::pmap(.f = sum)
 list(a = 1:10, b = 1:10, c = 1:10) %>% 
   purrr::pmap_int(.f = function(a,b,c) a + b + c)
+```
 
-### 3.3 walk is map() for side effects (printing, writing, modifying by reference)
-purrr::walk(.x = 1:10, .f = ~sqrt(.x)) # returns nothing! 
+#### `walk` para efectos secundarios
 
-### 3.3 map_if modifies only the list entries that return TRUE on .p
-purrr::map_if(.x = list(a = 1:15, b = letters, c = runif(200)), 
-              .p = is.numeric,
-              .f = sum)
+Esta función y sus correspondientes modificaciones `walk2` `pwalk` son idénticas a map excepto que se utilizan solamente para efectos secundarios (escribir en consola, guardar archivos, modificar por referencia, etc), y no deuvuelve ninguna estructua con ningún valor.
 
-#and it has an .else parameter
-purrr::map_if(.x = list(a = 1:15, b = letters, c = runif(200)), 
-              .p = is.numeric,
-              .f = sum, 
-              .else = ~paste(.x, collapse=''))
+```{r}
+purrr::walk(.x = 1:10, .f = ~sqrt(.x)) # returns nothing!
+```
 
-### 3.4 map_at
-purrr::map_at(.x = list(a = 1:15, b = letters, c = runif(200)), 
-              .at = c(1,3),
-              .f = sum)
+#### `map_depth` recorre sub elementos de una lista
 
-purrr::map_at(.x = list(a = 1:15, b = letters, c = runif(200)), 
-              .at = c('a', 'c'),
-              .f = sum)
+A veces la estructura de lista funciona muy bien para coleccionar elementos que deben ser tratados igual, pero que queremos iterar sobre cada uno por separado. Para esto, el parámetro `.depth` permite especificar el nivel de la lista por el que se va a iterar.
 
-### 3.5 map_depth maps inside a nested list
-# equivalent to map(.x, map, .f),
-# map(.x, ~map(.x, ~map(..., map(.x, map, .f)))
-purrr::map_depth(.x = list(a = list('element1 is', 'A'),
-                           b = list('element2 is', 9),
-                           c = list('element3 is', pi)),
-                 .depth = 1,
-                 .f = ~paste(.x, collapse = ' '))
+Por ejemplo, supongamos que tenemos estos tres vectores, y queremos tener un indicador booleano ppara cada número, indicando si es un número par.
+
+```{r}
+lista_de_vectores <- list(vector1 = c(1,4,5,6,8,21,22,99),
+                                      vector2 = 2^(1:10),
+                                      vector3 = seq(21,0,-3))
+str(lista_de_vectores)
+```
+
+Con `depth = 1`, se comporta igual que una llamada de `map`. Podemos aprovechar y asignarle los nombres de sus valores a cada vector.
+
+```{r}
+lista_de_vectores <- map_depth(.x = lista_de_vectores,
+                               .depth = 1,
+                               .f = ~set_names(.x, .x))
+str(lista_de_vectores)
+```
+
+
+```{r}
+es_par <- map_depth(.x = lista_de_vectores, 
+                    .depth = 2,
+                    .f = ~.x %% 2 == 0)
+str(es_par)
+```
+
+
+# 3. purrr para análisis de datos 
+
+```{r}
+library(palmerpenguins)
+penguins
+```
+## Trucos para trabajar con tablas
+
+- `purrr::keep` y `purrr::discard`nos permiten seleccionar subconjuntos de columnas
+- `base::split` nos permite dividir una tabla a una lista de tablas a partir de una lógica
+
+## Demo 1: Gráficos por isla
+
+```{r}
 
 # map: Just do it once! -------------------------------------------------------------
 
