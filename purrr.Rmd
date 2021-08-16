@@ -406,146 +406,111 @@ str(es_par)
 
 ```{r}
 library(palmerpenguins)
-penguins
+head(penguins)
 ```
+R tiene una robusta serie de paquetes para trabajar con datos, particularmente data rectangular, con una infinidad de opciones y soluciones sumamanete poderosas y accesibles. Si queremos por ejemplo el conteo de observaciones por isla, basta con un par de sencillas líneas de código 
+
+```{r}
+library(dplyr)
+penguins %>% 
+  group_by(island) %>% 
+  summarise(n())
+```
+
+Pero ¿qué pasa si queremos construcciones más complejas por grupo? Como por ejemplo si quiséramos el gráfico de masa en gramos vs longitud de la aleta por cada isla
+
+```{r, eval=FALSE}
+library(ggplot2)
+penguins %>% 
+  group_by(island) %>% 
+  summarise(???)
+```
+
 ## Trucos para trabajar con tablas
 
-- `purrr::keep` y `purrr::discard`nos permiten seleccionar subconjuntos de columnas
 - `base::split` nos permite dividir una tabla a una lista de tablas a partir de una lógica
+- `purrr::keep` y `purrr::discard`nos permiten seleccionar subconjuntos de columnas
 
-## Demo 1: Gráficos por isla
+```{r}
+penguin_plots <- penguins %>%
+  split(.$island) %>% # en R 4.1 se puede usar split(penguins, ~island)
+  map(~qplot(data = .x,
+             x = body_mass_g,
+             y = flipper_length_mm, 
+             geom = 'point'))
+
+names(penguin_plots)
+penguin_plots$Biscoe
+penguin_plots$Dream
+
+```
+
+
+Y como la expresión puede ser tan compleja como se desee, podemos incluso envolver el gráfico en la función `plotly::ggplotly` que devuelva gráficos html interactivos. 
+
+```{r}
+library(plotly)
+penguin_plots <- penguins %>%
+  split(.$island) %>% # en R 4.1 se puede usar split(penguins, ~island)
+  map(~plotly::ggplotly(qplot(data = .x,
+                              x = body_mass_g,
+                              y = flipper_length_mm, 
+                              geom = 'point',
+                              xlab = 'Masa en gramos',
+                              ylab = 'Lengitud de aleta en mm') + 
+                          theme_minimal()))
+
+penguin_plots
+```
+
+
+Y todo esto lo podemos generalizar y empaquetar en una función:
+
+```{r}
+#' Crea una lista de gráficos interactivos por grupos
+#'
+#' Construye un gráfico ggplotly para cada subconjunto de datos especificado 
+#' @param datos data.frame
+#' @param grupo Caracter que especifica qué columna se usará como el grupo por separar  
+#' @param ... Parametros adicionales que pasarle a `qplot`. Ver `?qplot` para mayor detalle
+#'
+#' @return Una lista de objetos plotly, cada uno correspondiente a un valor unico de 'grupo'  
+#'
+#' @examples
+graficos_por_grupos <- function(datos, grupo, ...){
+  lista_tablas <- split(datos, datos[[grupo]])
+  
+  graficos <- map(.x = lista_tablas, 
+                  .f = ~plotly::ggplotly(
+                    ~qplot(data = .x, ...) + 
+                      theme_minimal()
+                    )
+                  )
+  
+  return(graficos)
+}
+```
+
+Nótese cómo se colocan los tres puntos dentro de la llamada de qplot, de forma que se pueden pasar todos los parámetros sin requerir explícitamente ninguno.
 
 ```{r}
 
-# map: Just do it once! -------------------------------------------------------------
+# ayuda no funciona
+graficos_por_grupos(datos = penguins, 
+                    grupo = 'species', 
+                    x = bill_length_mm,
+                    xlab = 'Lengitud del pico, en mm',
+                    alpha = .8,
+                    geom = 'histogram')
 
-# load some data
-pkmn <- fread('pkmn.csv') %>% janitor::clean_names()
+# y pelado sí funciona
+qplot(data = split(penguins, penguins$island)$Biscoe, 
+      x = bill_length_mm,
+      alpha = 0.8,
+      xlab = 'Lengitud del pico, en mm')
+```
 
-# get the mean speed for each type? -> immediate
-pkmn[, .(mean_speed = mean(speed)), by = type_1]
-
-# more complex asks: make a plot of hp vs speed for each type separately
-pkmn[, .(`???`), by = type]
-
-# long way to facet_wrap()
-
-# Demo 1 -----------------------------------------------------------------------
-
-# tip: split goes from single data.frame to named list of dataframes
-type_tables <- pkmn %>% split(., .$type_1)
-str(type_tables, 1, give.attr = F)
-
-type_plots <- type_tables %>% 
-  map(~ggplot(.x, 
-              mapping = aes(x = speed, y = hp)) + 
-        geom_point() + 
-        theme_minimal())
-# call each plot
-type_plots$Normal
-
-# slightly better
-type_plots <- type_tables %>% 
-  map2(.y = names(.),
-       ~ggplot(data = .x, 
-               mapping = aes(x = speed, y = hp),
-               alpha = .85) + 
-         geom_smooth(formula = y~x, method = 'lm') + 
-         geom_point() + 
-         theme_minimal() + 
-         ggtitle(.y)) %>% 
-  map(.x = ., .f = plotly::ggplotly)
-
-# call each plot
-type_plots$Electric
-type_plots$Dragon
-
-split_plot <- function(data, split_variable, x_axis, y_axis, static = TRUE){
-  split_data <- data %>% split(data[[split_variable]])
-  
-  split_plots <- split_data %>% 
-    map2(.y = names(.),
-         ~ggplot(data = .x, 
-                 mapping = aes_string(x = x_axis, y = y_axis),
-                 alpha = .85) + 
-           geom_smooth(formula = y~x, method = 'lm') + 
-           geom_point() + 
-           theme_minimal() + 
-           ggtitle(.y))
-  
-  if(!static){
-    split_plots %<>% map(plotly::ggplotly)
-  }
-
-  return(split_plots)
-}
-
-split_plot(data = iris,
-           split_variable = 'Species',
-           x_axis = 'Sepal.Length',
-           y_axis = 'Sepal.Width')
-
-# Demo 2 ------------------------------------------------------------------
-
-# plot the relationship of each other stat vs_hp ???
-
-# plot the relationship of each other stat vs hp
-
-stats <- c('attack', 'defense', 'sp_atk', 'sp_def') %>% 
-  purrr::set_names(.)
-
-
-map(.x = stats,
-    .f = ~chronicle::make_scatterplot(dt = pkmn,
-                                     x = .x,
-                                     y = 'hp', 
-                                     show_trend = TRUE, 
-                                     trend_method = 'lm'))
-
-hp_relationship <- map(.x = stats,
-    .f = ~chronicle::make_scatterplot(dt = pkmn,
-                                      x = .x,
-                                      y = 'hp',
-                                      groups = 'type_1', 
-                                      faceted = TRUE,
-                                      show_trend = TRUE, 
-                                      trend_method = 'lm', 
-                                      static = TRUE, 
-                                      scales = 'free') + 
-      ggtitle(.x)) %>%
-  map(plotly::ggplotly)
-
-
-hp_relationship$sp_atk
-
-plot_all_vs_one <- function(data, variable, groups, static = TRUE){
-  # identify all columns 
-  cols <- colnames(data) %>% 
-    purrr::set_names(.) %>% 
-    setdiff(variable)
-  
-  var_vs_all <- map(.x = cols,
-                         .f = ~chronicle::make_scatterplot(dt = data,
-                                                           x = .x,
-                                                           y = variable,
-                                                           groups = groups, 
-                                                           faceted = TRUE,
-                                                           show_trend = is.numeric(data[[.x]]), 
-                                                           trend_method = 'lm', 
-                                                           static = TRUE, 
-                                                           scales = 'free') + 
-                           ggtitle(.x))
-  
-  if(!static){
-    var_vs_all %<>% map(plotly::ggplotly)
-  }
-  return(var_vs_all)
-}
-
-plot_all_vs_one(data = iris, variable = 'Sepal.Width', groups = 'Species', static = TRUE)
-
-
-colnames(palmerpenguins::penguins) %>% set_names()
+```{r}
 
 # Demo 3 ------------------------------------------------------------------
 
