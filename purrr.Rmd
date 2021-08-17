@@ -2,9 +2,6 @@
 title: "Programación Funcional con {purrr}"
 author: "Growth Acceleration Partners"
 date: "8/12/2021"
-output:
-  ioslides_presentation:
-    widescreen: true
 ---
 
 ```{r setup, include=FALSE}
@@ -13,12 +10,26 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(purrr)
+
+# para ejemplos
+library(palmerpenguins)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+
+# para paralelo
+library(future)
+library(furrr)
+library(tictoc)
 ```
 
-# purrr: 
-"Provee un conjunto de herrramientas para trabajar con funciones y vectores de manera consistente"
+# Programación funcional con purrr
 
-# 0. Funciones en R
+"purrr mejora la programación funcional en R al proveer un conjunto completo y consistente de herrramientas para trabajar con funciones y vectores" - <https://purrr.tidyverse.org/>
+
+# 0. Sentar bases
+
+## Funciones en R
 
 ```{r, eval=FALSE}
 nombre_funcion <- function(parametro1, parametro2, ...){
@@ -28,19 +39,9 @@ nombre_funcion <- function(parametro1, parametro2, ...){
 }
 ```
 
-Tip de vida: dentro del cuerpo de la funcion usar `ctrl` + `alt` + `shift` + `R`
+Tip de vida: dentro del cuerpo de la función, usar `ctrl/cmmd` + `alt` + `shift` + `R`
 
 ```{r, eval=FALSE}
-#' Title
-#'
-#' @param parametro1 
-#' @param parametro2 
-#' @param ... 
-#'
-#' @return
-#' @export
-#'
-#' @examples
 nombre_funcion <- function(parametro1, parametro2, ...){
   # [cuerpo de la funcion]
   
@@ -48,11 +49,11 @@ nombre_funcion <- function(parametro1, parametro2, ...){
 }
 ```
 
-Este tipo de documentación se llama Roxygen, y esta es la forma de documentar paquetes en R.
+Este tipo de documentación se llama Roxygen, y esta es la forma moderna de documentar paquetes en R.
 
 ## Ambientes en R
 
-Cuando una función se ejecuta, crea su propio ambiente contenido en el ambiente desde donde se llamó la función. La función va a buscar primero los valores dentro de su propio ambiente, y si no existen "saldrá a buscarlos" en los niveles superiores.
+Cuando una función se ejecuta, crea su propio ambiente contenido en el ambiente desde donde se llamó la función. La función va a buscar primero los valores dentro de su propio ambiente, y si no existen ahí, "saldrá a buscarlos" en los niveles superiores *para traerse una copia.*
 
 ```{r}
 x <- 1
@@ -62,11 +63,13 @@ f <- function(x){
   message('x vale `', x, '`, y vale `', y, '`.')
 }
 
-f(x=3)
-f(x="AAAAA!!!")
+f(x = 3)
+f(x = "verde")
 ```
 
-Bajo esta perspectiva,la acción de pasarle parámetros a una función lo que hace es declarar esas variables en el nuevo ambiente. Y cuando esta función termina su ejecución, ese ambiente se extingue sin pasarle sus valores a nadie más.
+Bajo esta perspectiva, la acción de pasarle parámetros a una función lo que hace es declarar esas variables en el nuevo ambiente.
+
+Y cuando esta función termina su ejecución, ese ambiente se extingue sin pasarle sus valores a nadie más.
 
 ```{r}
 cambiar_x <- function(){
@@ -95,16 +98,15 @@ message('Y con una asignación sí cambia: ', x)
 
 ## Efectos secundarios
 
-Si bien el llamado de `return` es el que le permite a una función enviar valores a otro ambiente, no hay nada que les detenga hacer cambios en memoria de otras maneras, como por ejemplo escribir en el disco (como `write_csv`, `saveRDS`, etc.), o modificar directamente los valores en RAM por referencia (como los mutate de `data.table` `dt[, :=]` o la asignación `<<-`). Estos son llamados efectos secundarios porque si bien no son parte del `return`, generan cambios fuera de su ambiente.
-
-
+Si bien el llamado de `return` es el que le permite enviar valores del ambiente de una función a otro ambiente, no hay nada que les detenga hacer cambios en memoria de otras maneras, como por ejemplo escribir en el disco (como `write_csv`, `saveRDS`, etc.), o modificar directamente los valores en RAM por referencia (como los mutate de `data.table` `dt[, :=]` o la asignación `<<-`). Estos son llamados efectos secundarios porque si bien no son parte del `return`, generan cambios fuera de su ambiente.
 
 ## Funciones puras e impuras
 
 Para que una función se considere pura, debe cumplir:
-1. Si la función se llama varias veces con los mismos parámetros, debe siempre retornar el mismo valor (salvo alatoreidad deseada).
-2. La función no debe tener efectos secundarios.
 
+1.  Si la función se llama varias veces con los mismos parámetros, debe siempre retornar el mismo valor (salvo aleatoreidad deseada).
+
+2.  La función no debe tener efectos secundarios.
 
 ```{r}
 fpura = function(x,y,z){
@@ -125,7 +127,6 @@ fpura(x,y,z)
 print(c(x,y,z))
 ```
 
-
 ```{r}
 fimpura = function(x,y,z){
   z <<- z + mean(x,y) # modifica valores fuera de su ambiente (mala práctica!)
@@ -142,7 +143,7 @@ fimpura(x,y,z)
 fimpura(x,y,z)
 fimpura(x,y,z)
 
-print(c(x,y,z)) # ambió de valor fuera de la funcion
+print(c(x,y,z)) # cambio de valor fuera de la funcion
 ```
 
 ## Listas
@@ -150,7 +151,7 @@ print(c(x,y,z)) # ambió de valor fuera de la funcion
 Contenedores indexados sin restricciones de clase:
 
 ```{r}
-lista <- list(sum, c(1,3,5), 'Naranja')
+(lista <- list(sum, c(1,3,5), 'Naranja'))
 ```
 
 Al igual que los vectores atómicos, podemos seleccionar un elemento con `[]`. Con corchetes simples, devuelve una lista de que contiene el (los) elemento(s) indexado(s).
@@ -159,13 +160,13 @@ Al igual que los vectores atómicos, podemos seleccionar un elemento con `[]`. C
 # lista[2] == list(c(1,3,5))
 lista[2]
 ```
+
 ```{r}
 # lista[2:3] == list(c(1,3,5), "Naranja")
 lista[2:3]
 ```
 
-
-Con corchetes dobles ``[[]]`` retorna el elemento de la lista directaments, sea de la clase que sea
+Con corchetes dobles `[[]]`, capturamos el elemento de la lista directamente, sea de la clase que sea
 
 ```{r}
 # lista[[2]] == c(1,3,5)
@@ -178,16 +179,20 @@ class(lista[2])
 class(lista[[2]])
 ```
 
-*Dificultades con las listas:*
+### Dificultades con las listas
 
-1. Pueden (o no) tener nombres
-2. Pueden contener otras listas 
+1.  Pueden (o no) tener nombres
+
+2.  Pueden contener otras listas
 
 ```{r}
-lista$entrada_con_nombre <- list(mean, vector_con_nombre=letters[1:3], c('a', 'b', 'c'))
+lista$entrada_con_nombre <- list(mean, 
+                                 vector_con_nombre=letters[1:3], 
+                                 c('a', 'b', 'c'))
+names(lista)
 ```
 
-La función str() es sumamente útil para perderle el miedo a las listas. El parámetro max.level permite especificar hasta qué nivel desgranar
+La función `str()` es sumamente útil para perderle el miedo a las listas
 
 ```{r}
 str(object = lista)
@@ -204,22 +209,21 @@ str(object = lista, max.level = 2)
 
 ## Minimo Necesario:
 
-"En R, las funciones son ciudadanas de primera clase" -> Existen en el ambiente y se pueden enviar como cualquier otro parámtro a otras funciones
+"En R, las funciones son ciudadanas de primera clase" -\> Existen en el ambiente y se pueden enviar como cualquier otro parámetro a otras funciones.
 
-Un *funcional* es una función que recibe otra función entre sus parametros, y devuelve un vector
-
+Un *funcional* es una función que recibe otra función entre sus parametros, y devuelve un vector (aquí usamos "vector" de forma muy flexible, refiriéndonos a cualquier objeto indexable).
 
 ## Funcionales en R base
 
-La familia de funciones `apply` se llaman así porque *aplican* una función a cada uno de los elementos de un vector (aquí usamos vector de forma muy flexible, refiriéndonos a cualquier objeto indexable). Importante notar que la función se pone sin paréntesis, porque lo que pasamos es el objeto, no la llamada.
-
+La familia de funciones `apply` se llaman así porque *aplican* una función a cada uno de los elementos de un vector (de nuevo, definición flexible). Es Importante notar que la función se pone sin paréntesis, porque lo que pasamos es el objeto, no la llamada.
 
 ```{r}
 apply_manual <- function(FUN, X){
-  for(Xi in X){
-    FXi = FUN(Xi)
-    print(FXi)
+  FX = list()
+  for(i in seq_along(X)){
+    FX[i] = FUN(X[i])
   }
+  return(FX)
 }
 
 apply_manual(FUN = sqrt, X = 1:10)
@@ -231,7 +235,7 @@ base::sapply(X = 1:10, FUN = sqrt) # s viene de 'simplified'
 #?lapply; ?vapply; ?tapply
 ```
 
-Algo importante a notar de esta última llamada es que todas estas funciones conservan los nombres de los elementos por los que iteran. Esto es una excelente práctica para conservar el orden y trazar con mayor facilidad los resultados de estas llamadas, y una acción frecuentemente cómoda es nombrar cada elemento con su mismo valor:
+Algo importante a notar de estas últimas llamadas es que todas estas funciones conservan los nombres de los elementos por los que iteran. Esto es una excelente práctica para conservar el orden y trazar con mayor facilidad los resultados de estas llamadas. Una acción frecuentemente cómoda es nombrar cada elemento con su mismo valor:
 
 ```{r}
 aj <- letters[1:10]
@@ -243,22 +247,21 @@ resultado_apply$a
 resultado_apply$c
 ```
 
-Y aunque si bien no es tan inmediatamente legible, la función `set_names` de `purrr` (que llama a la función de `rlang` con el mismo nombre) recibe el vector y un vector de nombres, y devuelve ese mismo vector ya nombrado. Esto permite que no se tenga que romper el camino de llamadas para asignar nombres
+Y aunque si bien no es tan inmediatamente legible, la función `set_names` de `purrr` (que llama a la función de `rlang` con el mismo nombre) recibe dos parámetros: el vector y un vector de nombres que asignarle. Esto permite que no se tenga que romper el camino de llamadas para asignar nombres, y podemos usar la notación `.` del pipe de `magrittr` para pasar el mismo valor para ambos parámetros. (Nota al pie: esta notación no existe en el pipe nativo de R 4.1)
 
 ```{r}
 resultado_apply <- letters[1:10] %>% 
-  purrr::set_names(.) %>% # acá recibe el vector, y adicionalmente decimos que el segundo parametro va a ser el mismo vector
+  purrr::set_names(.) %>% # notacion de .
   lapply(FUN = toupper)
 
 names(resultado_apply)
 resultado_apply$a
 resultado_apply$c
-
 ```
 
- 
- 
- Y para usar funciones con más de un parámetro, estas funciones aprovechan el constructo `...`, que sirve como un "comodín" para pasarle parámetros a una función interna:
+### Constructo \`...\`
+
+Si necesitamos para usar funciones con más de un parámetro, estas funciones aprovechan el constructo `...`, que sirve como un "comodín" para pasarle parámetros a una función interna:
 
 ```{r}
 aplicar_tres_puntos <- function(funcion, ...){
@@ -278,30 +281,42 @@ aplicar_tres_puntos(funcion = sort, x = c(1,3,2,NA,100), decreasing = TRUE, na.l
 
 ```
 
-
 ```{r}
 raices_cuadradas <- sapply(X = 1:10, FUN = sqrt)
 sapply(X = raices_cuadradas, FUN = round, digits = 2)
 ```
 
-Podemos ver tanto que en la función construida como en las llamadas de sapply, no existe un parámetro `digits`. esta es de la función `round` propiamente, y el constructo `...` permite que se le pase sin requerir que cada parámetro esté declarado explícitamente en la función que la llama. 
+Podemos ver tanto que en la función construida como en las llamadas de sapply, no existe un parámetro `digits`. esta es de la función `round` propiamente, y el constructo `...` permite que se le pase sin requerir que cada parámetro esté declarado explícitamente en la función que la llama.
 
+### Funciones anónimas
 
+Algunas veces es provechoso usar funcionales con expresiones más complejas que una única función. Para esto existe el constructo de las funciones anónimas, las cuales nos permiten definir una función en la misma línea en que se le pasa como parámetro al funcional. Es importante no abusar de este constructo, ya que puede ser difícil de seguir si la expresión es sumamente compleja
 
-# 2. `purrr`
+```{r}
+sapply(X = 1:5, FUN = function(x) x + 1)
+```
 
-Las funciones `map` del paquete `purrr` vienen a desempeñar el mismo rol iterativo, pero con un conjunto de facilidades que hacen que se acoplen mejor a un esuqema de trabajo moderno en R.
+```{r}
+# mala idea
+lapply(X = letters[10:15],
+       FUN = function(x) mean(mpg[mpg$manufacturer > x,]$hwy - mpg[mpg$manufacturer > x,]$cty))
+```
+
+# 2. purrr
+
+La familia de funciones `map` de purrr vienen a desempeñar el mismo rol iterativo, pero con un conjunto de facilidades que hacen que se acoplen mejor a un esuqema de trabajo moderno en R.
 
 La función básica es `map`, que recibe un vector `.x`, y le aplica la función `.f`. Esta función devuelve una lista donde cada entrada es la evaluación de `.f(.x[i])`
 
 ```{r}
-purrr::map(.x = 1:10, .f = sqrt)
+purrr::map(.x = 1:10, .f = sqrt) # == lapply(X = 1:10, FUN = sqrt))
 ```
 
+Entonces ¿por qué usar purrr?
 
-### Notación de fórmula
+### 2.1 Notación de fórmula
 
-Si bien las funciones `map` tienen el mismo parámetro `...`, puede resultar más legible y más fácil de escribir las funciones en notación de fórmula. Esto es, se coloca la virgulilla `~` antes de una llamada normal de una función, y se usará la variable `.x` en el parámetro por el que se va a iterar. 
+Si bien las funciones `map` tienen el mismo parámetro `...`, puede resultar más legible y más fácil de escribir las funciones en notación de fórmula. Esto es, se coloca la virgulilla `~` antes de una llamada normal de una función, y se usará la variable `.x` en el parámetro por el que se va a iterar.
 
 ```{r}
 ## 1. formula notation
@@ -314,7 +329,7 @@ La principal ventaja de esta notación es que permite ser más explícito con la
 purrr::map(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
 ```
 
-Incluso cadenas con el operador pipe `%>%` de magrittr, o el nuevo pipe nativo `|>` de R >=4.1
+Incluso cadenas con el operador pipe `%>%` de magrittr, o el nuevo pipe nativo `|>` de R \>=4.1
 
 ```{r}
 purrr::map(.x = 1:10, 
@@ -324,9 +339,9 @@ purrr::map(.x = 1:10,
              + 1)
 ```
 
-### Modificadores de clase
+### 2.2 Modificadores de clase
 
-Si bien las listas son una estructura adecuada para almacenar resultados arbitrarios ya que permiten coleccionar entradas de cualquier clase (e incluso de clases distintas), existen muchos usos donde tener el resultado ennuna lista se vuelve incómodio. Para esto, la familia de funciones incluye `map`s son sufijos que especifican la clase en que se desea recibir el resultado. Por supuesto, las salidas deben ser convertibles a la clase deseada, y es nceesario entender los requisitos de cada una. 
+Si bien las listas son una estructura adecuada para almacenar resultados arbitrarios ya que permiten coleccionar entradas de cualquier clase (e incluso de clases distintas), existen muchos usos donde tener el resultado ennuna lista se vuelve incómodio. Para esto, la familia de funciones incluye `map`s son sufijos que especifican la clase en que se desea recibir el resultado. Por supuesto, las salidas deben ser convertibles a la clase deseada, y es nceesario entender los requisitos de cada una.
 
 Estas funciones son opinionadas por diseño, ya que desean evitar que una coerción inusual arruine la línea de procesos completa. Esto significa que son más estricas que usar las funciones de coerción `as.integer`, `as.character`, `as.integer`, etc.
 
@@ -334,7 +349,6 @@ Estas funciones son opinionadas por diseño, ya que desean evitar que una coerci
 # doubles
 purrr::map_dbl(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
 ```
-
 
 ```{r}
 map_int(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1) # frena de doble a enteros
@@ -344,9 +358,10 @@ map_lgl(.x = 1:10, .f = ~as.logical(round(sqrt(.x), 2) + 1))
 map_chr(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1)
 map_df(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1) #data.frame requiere que tengan nombres
 ```
-### Más modificaodres
 
-#### `map2` permite recorrer dos vectores emparejando índices
+### 2. 3 Más modificaodres
+
+#### 2.3.1 `map2` permite recorrer dos vectores emparejando índices
 
 ```{r}
 #### 3.1 map2 runs through 2 lists pairwise
@@ -354,7 +369,7 @@ purrr::map2(.x = 1:10, .y = 1:10, .f = ~.x + .y)
 purrr::map2_int(.x = 1:10, .y = 10:10, .f = ~.x + .y)
 ```
 
-#### `pmap` generaliza map2 a p vectores
+#### 2.3.2 `pmap` generaliza map2 a p vectores
 
 ```{r}
 list(a = 1:10, b = 1:10, c = 1:10) %>% 
@@ -363,7 +378,7 @@ list(a = 1:10, b = 1:10, c = 1:10) %>%
   purrr::pmap_int(.f = function(a,b,c) a + b + c)
 ```
 
-#### `walk` para efectos secundarios
+#### 2.3.3 `walk` para efectos secundarios
 
 Esta función y sus correspondientes modificaciones `walk2` `pwalk` son idénticas a map excepto que se utilizan solamente para efectos secundarios (escribir en consola, guardar archivos, modificar por referencia, etc), y no deuvuelve ninguna estructua con ningún valor.
 
@@ -371,7 +386,7 @@ Esta función y sus correspondientes modificaciones `walk2` `pwalk` son idéntic
 purrr::walk(.x = 1:10, .f = ~sqrt(.x)) # returns nothing!
 ```
 
-#### `map_depth` recorre sub elementos de una lista
+#### 2.3.4 `map_depth` recorre sub elementos de una lista
 
 A veces la estructura de lista funciona muy bien para coleccionar elementos que deben ser tratados igual, pero que queremos iterar sobre cada uno por separado. Para esto, el parámetro `.depth` permite especificar el nivel de la lista por el que se va a iterar.
 
@@ -393,25 +408,32 @@ lista_de_vectores <- map_depth(.x = lista_de_vectores,
 str(lista_de_vectores)
 ```
 
-
 ```{r}
 es_par <- map_depth(.x = lista_de_vectores, 
                     .depth = 2,
                     .f = ~.x %% 2 == 0)
 str(es_par)
+?map_dfc
 ```
 
-
-# 3. purrr para análisis de datos 
+#### 2.3.5 Muchos más
 
 ```{r}
-library(palmerpenguins)
+?map_if
+?map_at
+?imap
+?pwalk
+```
+
+# 3. purrr para análisis de datos
+
+```{r}
 head(penguins)
 ```
-R tiene una robusta serie de paquetes para trabajar con datos, particularmente data rectangular, con una infinidad de opciones y soluciones sumamanete poderosas y accesibles. Si queremos por ejemplo el conteo de observaciones por isla, basta con un par de sencillas líneas de código 
+
+R tiene una robusta serie de paquetes para trabajar con datos, particularmente data rectangular, con una infinidad de opciones y soluciones sumamanete poderosas y accesibles. Si queremos por ejemplo el conteo de observaciones por isla, basta con un par de sencillas líneas de código
 
 ```{r}
-library(dplyr)
 penguins %>% 
   group_by(island) %>% 
   summarise(n())
@@ -420,7 +442,6 @@ penguins %>%
 Pero ¿qué pasa si queremos construcciones más complejas por grupo? Como por ejemplo si quiséramos el gráfico de masa en gramos vs longitud de la aleta por cada isla
 
 ```{r, eval=FALSE}
-library(ggplot2)
 penguins %>% 
   group_by(island) %>% 
   summarise(???)
@@ -428,8 +449,8 @@ penguins %>%
 
 ## Trucos para trabajar con tablas
 
-- `base::split` nos permite dividir una tabla a una lista de tablas a partir de una lógica
-- `purrr::keep` y `purrr::discard`nos permiten seleccionar subconjuntos de columnas
+-   `base::split` nos permite dividir una tabla a una lista de tablas a partir de una lógica
+-   `purrr::keep` y `purrr::discard`nos permiten seleccionar subconjuntos de columnas
 
 ```{r}
 penguin_plots <- penguins %>%
@@ -445,11 +466,9 @@ penguin_plots$Dream
 
 ```
 
-
-Y como la expresión puede ser tan compleja como se desee, podemos incluso envolver el gráfico en la función `plotly::ggplotly` que devuelva gráficos html interactivos. 
+Y como la expresión puede ser tan compleja como se desee, podemos incluso envolver el gráfico en la función `plotly::ggplotly` que devuelva gráficos html interactivos.
 
 ```{r}
-library(plotly)
 penguin_plots <- penguins %>%
   split(.$island) %>% # en R 4.1 se puede usar split(penguins, ~island)
   map(~plotly::ggplotly(qplot(data = .x,
@@ -462,7 +481,6 @@ penguin_plots <- penguins %>%
 
 penguin_plots
 ```
-
 
 Y todo esto lo podemos generalizar y empaquetar en una función:
 
@@ -735,15 +753,12 @@ toc()
 
 ```
 
-
 # Lecturas recomendadas
 
-- La sección de [iteración](https://es.r4ds.hadley.nz/iteraci%C3%B3n.html) del libro R para ciencia de datos (traducción comunitaria del celebrado libro R for Data Science) R4DS)
-- En realidad todo el libro de R para Ciencia de Datos
-- 
+-   La sección de [iteración](https://es.r4ds.hadley.nz/iteraci%C3%B3n.html) del libro R para ciencia de datos (traducción comunitaria del celebrado libro R for Data Science) R4DS)
+-   En realidad todo el libro de R para Ciencia de Datos
+-   
 
+# original: <https://adv-r.hadley.nz/fp.html>
 
-
-# original: https://adv-r.hadley.nz/fp.html
-# traducido: https://translate.google.com/translate?hl=&sl=en&tl=es&u=https%3A%2F%2Fadv-r.hadley.nz%2Ffunctionals.html
-
+# traducido: <https://translate.google.com/translate?hl=&sl=en&tl=es&u=https%3A%2F%2Fadv-r.hadley.nz%2Ffunctionals.html>
