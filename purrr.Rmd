@@ -132,8 +132,9 @@ print(c(x,y,z))
 
 ```{r}
 fimpura = function(x,y,z){
-  z <<- z + mean(x,y) # modifica valores fuera de su ambiente (mala práctica!)
-  print(z)
+  z <<- z + mean(c(x,y)) # modifica valores fuera de su ambiente 
+  # (mala práctica!)
+  return(z)
 }
 ```
 
@@ -154,7 +155,9 @@ print(c(x,y,z)) # cambio de valor fuera de la funcion
 Contenedores indexados sin restricciones de clase:
 
 ```{r}
-(lista <- list(sum, c(1,3,5), 'Naranja'))
+(lista <- list(sum, 
+               c(1,3,5),
+               'Naranja'))
 ```
 
 Al igual que los vectores atómicos, podemos seleccionar un elemento con `[]`. Con corchetes simples, devuelve una lista de que contiene el (los) elemento(s) indexado(s).
@@ -184,9 +187,9 @@ class(lista[[2]])
 
 ### Dificultades con las listas
 
-1.  Pueden (o no) tener nombres
+1.  Pueden (o no) tener nombres.
 
-2.  Pueden contener otras listas
+2.  Pueden contener otras listas.
 
 ```{r}
 lista$entrada_con_nombre <- list(mean, 
@@ -195,7 +198,7 @@ lista$entrada_con_nombre <- list(mean,
 names(lista)
 ```
 
-La función `str()` es sumamente útil para perderle el miedo a las listas
+La función `str()` es sumamente útil para perderle el miedo a las listas.
 
 ```{r}
 str(object = lista)
@@ -210,15 +213,15 @@ str(object = lista, max.level = 2)
 
 # 1. Programacion funcional
 
-## Minimo Necesario:
+## Mínimo Necesario:
 
 "En R, las funciones son ciudadanas de primera clase" -\> Existen en el ambiente y se pueden enviar como cualquier otro parámetro a otras funciones.
 
-Un funcional es una función que recibe otra función entre sus parametros, y devuelve un vector (aquí usamos "vector" de forma muy flexible, refiriéndonos a cualquier objeto indexable).
+Un *funcional* es una función que recibe otra función entre sus parametros, y devuelve un vector (aquí usamos "vector" de forma muy flexible, refiriéndonos a cualquier objeto indexable).
 
 ## Funcionales en R base
 
-La familia de funciones `apply` se llaman así porque aplican una función a cada uno de los elementos de un vector (de nuevo, definición flexible). Es Importante notar que la función se pone sin paréntesis, porque lo que pasamos es el objeto, no la llamada.
+La familia de funciones `apply` se llaman así porque *aplican* una función a cada uno de los elementos de un vector (de nuevo, definición flexible). Es Importante notar que la función se pone sin paréntesis, porque lo que pasamos es el objeto, no la llamada.
 
 ```{r}
 apply_manual <- function(FUN, X){
@@ -233,8 +236,8 @@ apply_manual(FUN = sqrt, X = 1:10)
 ```
 
 ```{r}
-base::apply(X = mtcars, MARGIN = 2, FUN = mean)
 base::sapply(X = 1:10, FUN = sqrt) # s viene de 'simplified'
+base::apply(X = mtcars, MARGIN = 2, FUN = mean)
 #?lapply; ?vapply; ?tapply
 ```
 
@@ -267,19 +270,19 @@ resultado_apply$c
 Si necesitamos para usar funciones con más de un parámetro, estas funciones aprovechan el constructo `...`, que sirve como un "comodín" para pasarle parámetros a una función interna:
 
 ```{r}
-aplicar_tres_puntos <- function(funcion, ...){
-  funcion(...)
+aplicar_tres_puntos <- function(f, ...){
+  f(...)
 }
 
 # con la funcion round
 ?round
-aplicar_tres_puntos(funcion = round, x = 0.5555555, digits = 2)
+aplicar_tres_puntos(f = round, x = 0.5555555, digits = 1)
 
 # con la funcion sort
 ?sort
-aplicar_tres_puntos(funcion = sort, x = c(1,3,2,NA,100))
-aplicar_tres_puntos(funcion = sort, x = c(1,3,2,NA,100), decreasing = TRUE)
-aplicar_tres_puntos(funcion = sort, x = c(1,3,2,NA,100), decreasing = TRUE, na.last = TRUE)
+aplicar_tres_puntos(f = sort, x = c(1,3,2,NA,100))
+aplicar_tres_puntos(f = sort, x = c(1,3,2,NA,100), decreasing = TRUE)
+aplicar_tres_puntos(f = sort, x = c(1,3,2,NA,100), decreasing = TRUE, na.last = TRUE)
 
 
 ```
@@ -307,7 +310,7 @@ lapply(X = letters[10:15],
 
 # 2. purrr
 
-La familia de funciones `map` de purrr vienen a desempeñar el mismo rol iterativo, pero con un conjunto de facilidades que hacen que se acoplen mejor a un esuqema de trabajo moderno en R.
+La familia de funciones `map` de purrr vienen a desempeñar el mismo rol iterativo, pero con un conjunto de facilidades que hacen que se acoplen mejor a un esquema de trabajo moderno en R.
 
 La función básica es `map`, que recibe un vector `.x`, y le aplica la función `.f`. Esta función devuelve una lista donde cada entrada es la evaluación de `.f(.x[i])`
 
@@ -367,9 +370,8 @@ map_df(.x = 1:10, .f = ~round(sqrt(.x), 2) + 1) #data.frame requiere que tengan 
 #### 2.3.1 `map2` permite recorrer dos vectores emparejando índices
 
 ```{r}
-#### 3.1 map2 runs through 2 lists pairwise
 purrr::map2(.x = 1:10, .y = 1:10, .f = ~.x + .y)
-purrr::map2_int(.x = 1:10, .y = 10:10, .f = ~.x + .y)
+purrr::map2_int(.x = 1:10, .y = 1:10, .f = ~.x + .y)
 ```
 
 #### 2.3.2 `pmap` generaliza map2 a p vectores
@@ -383,7 +385,7 @@ list(a = 1:10, b = 1:10, c = 1:10) %>%
 
 #### 2.3.3 `walk` para efectos secundarios
 
-Esta función y sus correspondientes modificaciones `walk2` `pwalk` son idénticas a map excepto que se utilizan solamente para efectos secundarios (escribir en consola, guardar archivos, modificar por referencia, etc), y no deuvuelve ninguna estructua con ningún valor.
+Esta función y sus correspondientes modificaciones `walk2` `pwalk` son idénticas a map excepto que se utilizan solamente para efectos secundarios (escribir en consola, guardar archivos, modificar por referencia, etc), y no devuelve ninguna estructua con ningún valor.
 
 ```{r}
 purrr::walk(.x = 1:10, .f = ~sqrt(.x)) # returns nothing!
@@ -397,8 +399,8 @@ Por ejemplo, supongamos que tenemos estos tres vectores, y queremos tener un ind
 
 ```{r}
 lista_de_vectores <- list(vector1 = c(1,4,5,6,8,21,22,99),
-                                      vector2 = 2^(1:10),
-                                      vector3 = seq(21,0,-3))
+                          vector2 = 2^(1:10),
+                          vector3 = seq(21,0,-3))
 str(lista_de_vectores)
 ```
 
@@ -416,35 +418,6 @@ es_par <- map_depth(.x = lista_de_vectores,
                     .depth = 2,
                     .f = ~.x %% 2 == 0)
 str(es_par)
-?map_dfc
-```
-
-#### 2.3.4 `map_depth` recorre sub elementos de una lista
-
-```{r}
-
-
-
-# Bonus 2! furrr: future + purrr -----------------------------------------------
-library(furrr)
-plan(multiprocess) # might take some time prepping
-
-# https://github.com/DavisVaughan/furrr
-
-library(tictoc)
-
-tic('sequential')
-map(c(2, 2, 2), ~Sys.sleep(.x))
-toc()
-
-tic('parallel')
-future_map(c(2, 2, 2), ~Sys.sleep(.x))
-toc()
-
-
-# It's important to remember that data has to be passed back and forth between 
-# the workers. This means that whatever performance gain you might have gotten 
-# from your paralellization can be crushed by moving large amounts of data around. 
 ```
 
 #### 2.3.5 Muchos más
@@ -453,7 +426,6 @@ toc()
 ?map_if
 ?map_at
 ?imap
-?pwalk
 ```
 
 # 3. purrr para análisis de datos
@@ -480,7 +452,7 @@ penguins %>%
 
 ## Trucos para trabajar con tablas
 
--   `base::split` nos permite dividir una tabla a una lista de tablas a partir de una lógica (que pueden ser, por ejemplo, los valores de una columna de la misma tabla).
+-   `base::split` nos permite dividir una tabla en una lista de tablas a partir de una lógica (que pueden ser, por ejemplo, los valores de una columna de la misma tabla).
 -   `purrr::keep` y `purrr::discard` nos permiten seleccionar subconjuntos de columnas.
 
 ```{r}
@@ -491,8 +463,8 @@ penguin_plots <- penguins %>%
              y = flipper_length_mm, 
              geom = 'point'))
 
-names(penguin_plots)
-penguin_plots$Biscoe
+str(penguin_plots, max.level = 1)
+penguin_plots
 penguin_plots$Dream
 
 ```
@@ -529,12 +501,14 @@ graficos_por_grupos <- function(datos, grupo, ...){
   
   graficos <- map2(.x = lista_tablas, 
                    .y = names(lista_tablas),
-                   .f = function(.x, .y, ...) 
+                   ..., #parametros que se le va a pasar
+                   .f = function(.x, .y, ...)  #anonima
                      ggplotly(qplot(data = .x, 
                                     main = .y, 
                                     ...) +
-                                theme_minimal()), #anonima
-                   ...) #parametros que se le va a pasar
+                                theme_minimal()
+                              )
+                   )
   
   return(graficos)
 }
@@ -543,6 +517,7 @@ graficos_por_grupos <- function(datos, grupo, ...){
 El valor de tener los tres puntos dentro de la llamada de `qplot` es que esta función tiene una infinidad de posibles parámetros, ya que puede recibir cualquier mapeo estético de \`ggplot2\`. Declarar cada uno y manejar sus ausencias sería arduo, complicado y muy poco legible.
 
 ```{r}
+?qplot
 graficos_por_grupos(datos = penguins, 
                     grupo = 'island', 
                     x = flipper_length_mm,
@@ -565,6 +540,17 @@ graficos_por_grupos(datos = na.omit(penguins),
 ```
 
 ## Bonus: reduce
+
+La contraparte de map en el paradigma map+reduce, lo que hace es recibir una lista y aplicarle acumulativamente un operador cerrado (es decir una función que recibe dos elementos y devuelve uno del mismo tipo)
+
+```{r}
+# f(a,b)
+# f(f(a,b),c)
+# f(f(f(a,b),c),d)
+# ...
+
+1:10 %>% reduce(sum)
+```
 
 ```{r}
 species_tables <- split(penguins, penguins$species)
@@ -650,6 +636,7 @@ revisar_caracter <-
                          clase_esperada = 'character') 
 
 # para imprimir con formato
+revisar_caracter
 cat(revisar_caracter)
 
 ```
@@ -675,6 +662,10 @@ especificaciones <- data.frame(sufijo = c('char',
 funciones_fabricadas <- 
   purrr::pmap(.l = especificaciones,
               .f = hacer_funcion_revision)
+
+names(funciones_fabricadas) <- especificaciones$sufijo
+str(funciones_fabricadas)
+
 ```
 
 ```{r}
@@ -685,6 +676,26 @@ funciones_fabricadas %>% walk(cat)
 funciones_fabricadas %>% 
   reduce(c) %>% 
   readr::write_lines('funciones_revision.R')
+```
+
+# Bonus 2! furrr: `future` + `purrr`
+
+Las ejecuciones de `map` sobre cada elemento son secuenciales pero independientes, por lo que es bastante directo lograr una ejecución paralela. Y justamente para esto existe el paquete `furrr`, una implementación de `future` sobre las mismas funciones de `purrr`. En la mayoría de los casos, basta con cambiar las llamadas de `map` por `future_map`, y... listo!
+
+Referencia: \# <https://github.com/DavisVaughan/furrr>
+
+```{r}
+library(furrr)
+plan(multisession) # perparativos para ejecutar
+
+library(tictoc)
+tic('sequential')
+map(c(2, 2, 2), ~Sys.sleep(.x))
+toc()
+tic('parallel')
+future_map(c(2, 2, 2), ~Sys.sleep(.x))
+toc()
+
 ```
 
 # Lecturas recomendadas
