@@ -4,6 +4,8 @@ author: "Growth Acceleration Partners"
 date: "8/12/2021"
 ---
 
+Nota: este R Markdown contiene errores adrede para demostrar funcionalidades, la idea de este es correr las llamadas de una en una
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -16,6 +18,7 @@ library(palmerpenguins)
 library(ggplot2)
 library(plotly)
 library(dplyr)
+library(readr)
 
 # para paralelo
 library(future)
@@ -53,7 +56,7 @@ Este tipo de documentación se llama Roxygen, y esta es la forma moderna de docu
 
 ## Ambientes en R
 
-Cuando una función se ejecuta, crea su propio ambiente contenido en el ambiente desde donde se llamó la función. La función va a buscar primero los valores dentro de su propio ambiente, y si no existen ahí, "saldrá a buscarlos" en los niveles superiores *para traerse una copia.*
+Cuando una función se ejecuta, crea su propio ambiente contenido en el ambiente desde donde se llamó la función. La función va a buscar primero los valores dentro de su propio ambiente, y si no existen ahí, "saldrá a buscarlos" en los niveles superiores para traerse una copia.
 
 ```{r}
 x <- 1
@@ -211,11 +214,11 @@ str(object = lista, max.level = 2)
 
 "En R, las funciones son ciudadanas de primera clase" -\> Existen en el ambiente y se pueden enviar como cualquier otro parámetro a otras funciones.
 
-Un *funcional* es una función que recibe otra función entre sus parametros, y devuelve un vector (aquí usamos "vector" de forma muy flexible, refiriéndonos a cualquier objeto indexable).
+Un funcional es una función que recibe otra función entre sus parametros, y devuelve un vector (aquí usamos "vector" de forma muy flexible, refiriéndonos a cualquier objeto indexable).
 
 ## Funcionales en R base
 
-La familia de funciones `apply` se llaman así porque *aplican* una función a cada uno de los elementos de un vector (de nuevo, definición flexible). Es Importante notar que la función se pone sin paréntesis, porque lo que pasamos es el objeto, no la llamada.
+La familia de funciones `apply` se llaman así porque aplican una función a cada uno de los elementos de un vector (de nuevo, definición flexible). Es Importante notar que la función se pone sin paréntesis, porque lo que pasamos es el objeto, no la llamada.
 
 ```{r}
 apply_manual <- function(FUN, X){
@@ -416,6 +419,34 @@ str(es_par)
 ?map_dfc
 ```
 
+#### 2.3.4 `map_depth` recorre sub elementos de una lista
+
+```{r}
+
+
+
+# Bonus 2! furrr: future + purrr -----------------------------------------------
+library(furrr)
+plan(multiprocess) # might take some time prepping
+
+# https://github.com/DavisVaughan/furrr
+
+library(tictoc)
+
+tic('sequential')
+map(c(2, 2, 2), ~Sys.sleep(.x))
+toc()
+
+tic('parallel')
+future_map(c(2, 2, 2), ~Sys.sleep(.x))
+toc()
+
+
+# It's important to remember that data has to be passed back and forth between 
+# the workers. This means that whatever performance gain you might have gotten 
+# from your paralellization can be crushed by moving large amounts of data around. 
+```
+
 #### 2.3.5 Muchos más
 
 ```{r}
@@ -439,18 +470,18 @@ penguins %>%
   summarise(n())
 ```
 
-Pero ¿qué pasa si queremos construcciones más complejas por grupo? Como por ejemplo si quiséramos el gráfico de masa en gramos vs longitud de la aleta por cada isla
+Pero ¿qué pasa si queremos construcciones más complejas por grupo? Como por ejemplo si quiséramos el gráfico de masa en gramos vs longitud de la aleta por isla
 
 ```{r, eval=FALSE}
 penguins %>% 
   group_by(island) %>% 
-  summarise(???)
+  summarise(???) # list(ggplot() + ... + ? )
 ```
 
 ## Trucos para trabajar con tablas
 
--   `base::split` nos permite dividir una tabla a una lista de tablas a partir de una lógica
--   `purrr::keep` y `purrr::discard`nos permiten seleccionar subconjuntos de columnas
+-   `base::split` nos permite dividir una tabla a una lista de tablas a partir de una lógica (que pueden ser, por ejemplo, los valores de una columna de la misma tabla).
+-   `purrr::keep` y `purrr::discard` nos permiten seleccionar subconjuntos de columnas.
 
 ```{r}
 penguin_plots <- penguins %>%
@@ -472,293 +503,192 @@ Y como la expresión puede ser tan compleja como se desee, podemos incluso envol
 penguin_plots <- penguins %>%
   split(.$island) %>% # en R 4.1 se puede usar split(penguins, ~island)
   map(~plotly::ggplotly(qplot(data = .x,
-                              x = body_mass_g,
-                              y = flipper_length_mm, 
+                              x = flipper_length_mm,
+                              y = body_mass_g, 
                               geom = 'point',
-                              xlab = 'Masa en gramos',
-                              ylab = 'Lengitud de aleta en mm') + 
+                              xlab = 'Lengitud de aleta en mm', 
+                              ylab = 'Masa en gramos') +
                           theme_minimal()))
 
 penguin_plots
 ```
 
-Y todo esto lo podemos generalizar y empaquetar en una función:
+E incluso, ya con bastante práctica, esto lo podemos generalizar y empaquetar en una función. Un tema de cuidado en este paso es que la notación de fórmula no es compatible con el constructo de tres puntos, así que debe ser declarada con una función anónima
 
 ```{r}
 #' Crea una lista de gráficos interactivos por grupos
 #'
-#' Construye un gráfico ggplotly para cada subconjunto de datos especificado 
+#' Construye un gráfico ggplotly para cada subconjunto de datos
 #' @param datos data.frame
-#' @param grupo Caracter que especifica qué columna se usará como el grupo por separar  
-#' @param ... Parametros adicionales que pasarle a `qplot`. Ver `?qplot` para mayor detalle
+#' @param grupo Nombre de la columna se usará como el grupo por separar  
+#' @param ... Parametros adicionales que pasarle a `qplot`. 
 #'
-#' @return Una lista de objetos plotly, cada uno correspondiente a un valor unico de 'grupo'  
-#'
-#' @examples
+#' @return Una lista de objetos plotly, uno por cada grupo.
 graficos_por_grupos <- function(datos, grupo, ...){
   lista_tablas <- split(datos, datos[[grupo]])
   
-  graficos <- map(.x = lista_tablas, 
-                  .f = ~plotly::ggplotly(
-                    ~qplot(data = .x, ...) + 
-                      theme_minimal()
-                    )
-                  )
+  graficos <- map2(.x = lista_tablas, 
+                   .y = names(lista_tablas),
+                   .f = function(.x, .y, ...) 
+                     ggplotly(qplot(data = .x, 
+                                    main = .y, 
+                                    ...) +
+                                theme_minimal()), #anonima
+                   ...) #parametros que se le va a pasar
   
   return(graficos)
 }
 ```
 
-Nótese cómo se colocan los tres puntos dentro de la llamada de qplot, de forma que se pueden pasar todos los parámetros sin requerir explícitamente ninguno.
+El valor de tener los tres puntos dentro de la llamada de `qplot` es que esta función tiene una infinidad de posibles parámetros, ya que puede recibir cualquier mapeo estético de \`ggplot2\`. Declarar cada uno y manejar sus ausencias sería arduo, complicado y muy poco legible.
 
 ```{r}
-
-# ayuda no funciona
 graficos_por_grupos(datos = penguins, 
-                    grupo = 'species', 
-                    x = bill_length_mm,
-                    xlab = 'Lengitud del pico, en mm',
-                    alpha = .8,
-                    geom = 'histogram')
-
-# y pelado sí funciona
-qplot(data = split(penguins, penguins$island)$Biscoe, 
-      x = bill_length_mm,
-      alpha = 0.8,
-      xlab = 'Lengitud del pico, en mm')
+                    grupo = 'island', 
+                    x = flipper_length_mm,
+                    y = body_mass_g, 
+                    geom = 'point',
+                    xlab = 'Lengitud de aleta en mm', 
+                    ylab = 'Masa en gramos')
 ```
 
 ```{r}
+graficos_por_grupos(datos = na.omit(penguins), 
+                    grupo = 'species',
+                    x = body_mass_g, 
+                    xlab = 'Masa en gramos',
+                    geom = 'density',
+                    alpha = 0.7,
+                    col = sex,
+                    facets = ~island,
+                    fill = sex)
+```
 
-# Demo 3 ------------------------------------------------------------------
+## Bonus: reduce
 
-#' Check if the given parameter is of a specific class
-#'
-#' @param param Object to be checked.
-#' @param param_name Name of the parameter.
-#' @param checking_function The function to evaluate. Must return a boolean value (eg is.character, is.finite, is.data.frame)
-#' @param class_name Name of the class to place in the error message
-#' @param allow_null Skip the error if param is NULL. Default is FALSE.
-#'
-#' @return Returns an error message if param is not a ", class_name, ".
-#' @export
-#'
-#' @examples
-check_class <- function(param,
-                        param_name,
-                        checking_function,
-                        class_name,
-                        allow_null = FALSE){
-  if(!checking_function(param) | (allow_null & is.null(param))){
-    stop("'", param_name, "' parameter must be a ",  class_name,
-         ", but a ", paste(class(param), collapse = ' '), " was passed.")
+```{r}
+species_tables <- split(penguins, penguins$species)
+purrr::reduce(species_tables, rbind)
+purrr::reduce(species_tables, dplyr::left_join)
+```
+
+# 4. Fábrica de funciones
+
+Además del constructo del *funcional,* que recibe una función y entrega un vector, existen las llamadas *fábricas de funciones,* las cuales reciben funciones y entregan funciones nuevas. Este es un nivel de abstracción mayor con aplicaciones muy circunstanciales pero sumamante prácticas y poderosas.
+
+Pensemos por ejemplo que estamos desarrollando un proyecto, y una gran cantidad de errores que vemos son debido a que las funciones no están recibiendo objetos de las clases esperadas. Podríamos hacer, por ejemplo, una función que revise si el parámetro que recibe es una tabla, y si no lo es, envíe un mensaje claro a consola en lugar de tener que descifrar cada error de cada caso.
+
+```{r}
+revisar_df <- function(objeto, nombre_objeto = 'El objeto'){
+  if(!is.data.frame(objeto)){
+    stop(nombre_objeto, " debe ser un data.frame",
+         ", pero se pasó un ", paste(class(objeto), collapse = ' '), ".")
+  }
+  # si en efecto es un data.frame, no hace nada
+}
+revisar_df(mtcars)
+revisar_df('A')
+```
+
+Pero este tipo de revisiones habría que hacerlos para todas las clases de objetos que se pasen a cada función. Escribir todas las funciones de una en una no solamente sería un proceso tedioso, sino también propenso a dedazos, o peor aún a olvidar cambiar algo cuando se copia y pega muchas veces.
+
+Podemos hacer más bien una fábrica de funciones que revisen todo lo que queramos. Y más allá de devolverlas al ambiente, podemos guardarlas en un `.R` que podamos cargar en cualquier sesión. Para esto, nuestra función no devolverá un objeto función propiamente, sino su código fuente como texto plano. De hecho, así podemos no solamente crear la función en sí ¡sino también su documentación!
+
+Hagamos primero una función generalizada que revise una clase y levante un error solamente si el objeto no es de la clase esperada.
+
+```{r}
+revisar_clase <- function(objeto,
+                          nombre_objeto='El objeto',
+                          funcion_revision,
+                          clase_esperada){
+  if(!funcion_revision(objeto)){
+    stop(nombre_objeto, " debe ser de tipo ",  clase_esperada,
+         ", pero se recibió un ", 
+         paste(class(objeto), collapse = ' '), ".")
   }
 }
+revisar_clase(objeto = 'A', 
+              nombre_objeto = 'param1',
+              funcion_revision = is.character, 
+              clase_esperada = 'character')
 
+revisar_clase(objeto = 1, 
+              nombre_objeto = 'param1',
+              funcion_revision = is.character, 
+              clase_esperada = 'character')
+```
 
-# make particular cases 
+Y ahora simplemente creamos una función que escriba el código fuente de una función que fija la clase en `revisar_clase`, y de paso ya documentada.
 
-#' Check if the given parameter is a character vector
-#'
-#' @param param Object to be checked.
-#' @param param_name Name of the parameter.
-#' @param allow_null Skip the error if param is NULL. Default is FALSE.
-#'
-#' @return Returns an error message if param is not a character vector.
-#' @export
-check_char <- function(param, param_name, allow_null = FALSE){
-  check_class(param = param,
-              param_name = param_name,
-              checking_function = is.character,
-              class_name = 'character vector')
-}
-
-#' Check if the given parameter is a numeric vector
-#'
-#' @param param Object to be checked.
-#' @param param_name Name of the parameter.
-#' @param allow_null Skip the error if param is NULL. Default is FALSE.
-#'
-#' @return Returns an error message if param is not a numeric vector.
-#' @export
-check_num <- function(param, param_name, allow_null = FALSE){
-  check_class(param = param,
-              param_name = param_name,
-              checking_function = is.numeric,
-              class_name = 'numeric vector')
-}
-
-
-
-# make all of them in one call --------------------------------------------
-
-make_check_function <- function(suffix, check_fun, class_name){
-  check_this <- paste0("#' Check if the given parameter is a ", class_name, "
-#'
-#' @param param Object to be checked.
-#' @param param_name Name of the parameter.
-#' @param allow_null Skip the error if param is NULL. Default is FALSE.
-#'
-#' @return Returns an error message if param is not a ", class_name, ".
-#' @export
-check_", suffix, " <- function(param, param_name, allow_null = FALSE){
-  check_class(param = param,
-              param_name = param_name,
-              checking_function = ", check_fun, ",
-              class_name = '", class_name, "')
-}\n\n")
-  cat(check_this)
-}
-
-function_specs <- data.table(suffix = c('char', 'num', 'dt', 'df', 'logical'),
-                            check_fun = c('is.character',
-                                          'is.numeric',
-                                          'data.table::is.data.table',
-                                          'is.data.frame',
-                                          'is.logical'),
-                            class_name = c('character vector',
-                                           'numeric vector',
-                                           'data.table',
-                                           'data.frame',
-                                           'logical vector'))
-purrr::pwalk(.l = function_specs,
-             .f = make_check_function)
-
-
-# check functions ---------------------------------------------------------
-
-
-#' Check if the given parameter is a character vector
-#'
-#' @param param Object to be checked.
-#' @param param_name Name of the parameter.
-#' @param allow_null Skip the error if param is NULL. Default is FALSE.
-#'
-#' @return Returns an error message if param is not a character vector.
-#' @export
-check_char <- function(param, param_name, allow_null = FALSE){
-  check_class(param = param,
-              param_name = param_name,
-              checking_function = is.character,
-              class_name = 'character vector')
-}
-
-#' Check if the given parameter is a numeric vector
-#'
-#' @param param Object to be checked.
-#' @param param_name Name of the parameter.
-#' @param allow_null Skip the error if param is NULL. Default is FALSE.
-#'
-#' @return Returns an error message if param is not a numeric vector.
-#' @export
-check_num <- function(param, param_name, allow_null = FALSE){
-  check_class(param = param,
-              param_name = param_name,
-              checking_function = is.numeric,
-              class_name = 'numeric vector')
-}
-
-#' Check if the given parameter is a data.table
-#'
-#' @param param Object to be checked.
-#' @param param_name Name of the parameter.
-#' @param allow_null Skip the error if param is NULL. Default is FALSE.
-#'
-#' @return Returns an error message if param is not a data.table.
-#' @export
-check_dt <- function(param, param_name, allow_null = FALSE){
-  check_class(param = param,
-              param_name = param_name,
-              checking_function = data.table::is.data.table,
-              class_name = 'data.table')
-}
-
-#' Check if the given parameter is a data.frame
-#'
-#' @param param Object to be checked.
-#' @param param_name Name of the parameter.
-#' @param allow_null Skip the error if param is NULL. Default is FALSE.
-#'
-#' @return Returns an error message if param is not a data.frame.
-#' @export
-check_df <- function(param, param_name, allow_null = FALSE){
-  check_class(param = param,
-              param_name = param_name,
-              checking_function = is.data.frame,
-              class_name = 'data.frame')
-}
-
-#' Check if the given parameter is a logical vector
-#'
-#' @param param Object to be checked.
-#' @param param_name Name of the parameter.
-#' @param allow_null Skip the error if param is NULL. Default is FALSE.
-#'
-#' @return Returns an error message if param is not a logical vector.
-#' @export
-check_logical <- function(param, param_name, allow_null = FALSE){
-  check_class(param = param,
-              param_name = param_name,
-              checking_function = is.logical,
-              class_name = 'logical vector')
+```{r}
+hacer_funcion_revision <- function(sufijo,
+                                   funcion_revision,
+                                   clase_esperada){
+  revisar <- paste0("
+#' Revisa que el objeto sea de clase ", clase_esperada, "
+#' 
+#' Si no es de la clase esperada, eleva un mensaje de error detallando el nombre del objeto, la clase esperada y la clase del objeto que se paso.
+#' 
+#' @param objeto Objeto a ser revisado.
+#' @param nombre_objeto Nombre del objeto para ser referido en el error.
+#' @param funcion_revision Funcion para verificar si es de la clase.
+#' 
+#' @return No retorna valores. Eleva un mensaje de error de ser necesario.
+revisar_",sufijo," <- function(objeto, nombre_objeto, function_revision){
+  revisar_clase(objeto = objeto, 
+                nombre_objeto = nombre_objeto,
+                funcion_revision = ", funcion_revision,", 
+                clase_esperada = '",clase_esperada,"')
+}")
+  return(revisar)
 }
 
 
+revisar_caracter <- 
+  hacer_funcion_revision(sufijo = 'char', 
+                         funcion_revision = 'is.character',
+                         clase_esperada = 'character') 
 
+# para imprimir con formato
+cat(revisar_caracter)
 
+```
 
+Y ya teniendo esta fábrica, basta con construir la colección de especificaciones que queremos. Para esto montamos una tabla, de forma que es fácilmente mantenible, y además podemos pasársela transparentemente a \`pmap\`.
 
+```{r}
+especificaciones <- data.frame(sufijo = c('char',
+                                          'num',
+                                          'dt',
+                                          'df', 
+                                          'logical'),
+                               funcion_revision = c('is.character',
+                                                   'is.numeric',
+                                                   'data.table::is.data.table',
+                                                   'is.data.frame',
+                                                   'is.logical'),
+                               clase_esperada = c('character',
+                                                  'numeric',
+                                                  'data.table',
+                                                  'data.frame',
+                                                  'logical'))
+funciones_fabricadas <- 
+  purrr::pmap(.l = especificaciones,
+              .f = hacer_funcion_revision)
+```
 
+```{r}
+funciones_fabricadas %>% walk(cat)
+```
 
-
-
-
-
-
-
-
-
-
-
-
-# Bonus! purrr::reduce -----------------------------------------------------------
-
-f(f(a,b), c)
-
-# binary operations that are closed
-purrr::reduce(type_tables, rbind)
-purrr::reduce(type_tables, dplyr::left_join)
-
-
-# Bonus 2! furrr: future + purrr -----------------------------------------------
-library(furrr)
-plan(multiprocess) # might take some time prepping
-
-# https://github.com/DavisVaughan/furrr
-
-library(tictoc)
-
-tic('sequential')
-map(c(2, 2, 2), ~Sys.sleep(.x))
-toc()
-
-tic('parallel')
-future_map(c(2, 2, 2), ~Sys.sleep(.x))
-toc()
-
-
-# It's important to remember that data has to be passed back and forth between 
-# the workers. This means that whatever performance gain you might have gotten 
-# from your paralellization can be crushed by moving large amounts of data around. 
-
+```{r}
+funciones_fabricadas %>% 
+  reduce(c) %>% 
+  readr::write_lines('funciones_revision.R')
 ```
 
 # Lecturas recomendadas
 
 -   La sección de [iteración](https://es.r4ds.hadley.nz/iteraci%C3%B3n.html) del libro R para ciencia de datos (traducción comunitaria del celebrado libro R for Data Science) R4DS)
--   En realidad todo el libro de R para Ciencia de Datos
--   
-
-# original: <https://adv-r.hadley.nz/fp.html>
-
-# traducido: <https://translate.google.com/translate?hl=&sl=en&tl=es&u=https%3A%2F%2Fadv-r.hadley.nz%2Ffunctionals.html>
+-   En realidad todo el libro de [R para Ciencia de Datos](https://es.r4ds.hadley.nz)
+-   La sección de [Programación funcional](https://adv-r.hadley.nz/fp.html) de Advanced R ([traducción de Google translate](https://translate.google.com/translate?hl=&sl=en&tl=es&u=https%3A%2F%2Fadv-r.hadley.nz%2Ffunctionals.html))
